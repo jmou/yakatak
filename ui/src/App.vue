@@ -1,12 +1,40 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, useTemplateRef, computed } from "vue";
-import initialDeck from "../public/state/deck.json";
 
-const deck = ref(initialDeck);
+interface DeckItem {
+  id: string;
+  url: string;
+  title: string;
+  numTiles: number;
+}
 
-const selectedIndex = ref(deck.value.length - 1);
+const loading = ref(true);
+const error = ref<string | null>(null);
 
-const selected = computed(() => deck.value[selectedIndex.value]);
+async function init() {
+  try {
+    const response = await fetch("/api/deck");
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    deck.value = await response.json();
+    if (deck.value.length > 0) {
+      selectedIndex.value = deck.value.length - 1;
+    }
+  } catch (err) {
+    error.value = "" + err;
+    console.error("init failed:", err);
+  } finally {
+    loading.value = false;
+  }
+}
+
+const deck = ref<DeckItem[]>([]);
+const selectedIndex = ref(0);
+
+const selected = computed(() =>
+  selectedIndex.value < deck.value.length ? deck.value[selectedIndex.value] : null,
+);
 
 const deckElem = useTemplateRef("deckElem");
 const currElem = useTemplateRef("currElem");
@@ -63,14 +91,15 @@ function handleKeydown(event: KeyboardEvent) {
   } else if (event.key === "l") {
     currElem.value!.focus();
   } else if (event.key === "o") {
-    open(selected.value.url);
+    if (selected.value) open(selected.value.url);
   } else if (event.key === "d") {
     deleteSelected();
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener("keydown", handleKeydown);
+  await init();
   scrollToSelected("instant");
 });
 
@@ -82,7 +111,10 @@ onUnmounted(() => {
 <template>
   <main>
     <section ref="deckElem">
+      <div v-if="loading" class="loading">Loading deck...</div>
+      <div v-else-if="error" class="error">{{ error }}</div>
       <a
+        v-else
         :href="url"
         v-for="({ id, title, url }, index) in deck"
         :key="id"
@@ -90,18 +122,20 @@ onUnmounted(() => {
       >
         <div class="card" :class="{ selected: index === selectedIndex }">
           <div class="card-title">{{ title }}</div>
-          <img :src="`/state/scrape/${id}/derived/thumb.png`" />
+          <img :src="`/api/scrapes/${id}/thumb`" />
         </div>
       </a>
     </section>
     <section ref="currElem">
-      <div class="meta">{{ selected.title }}<br />{{ selected.url }}</div>
-      <img
-        v-for="tileIndex in Array.from({ length: selected.numTiles }, (_, i) => i)"
-        :key="tileIndex"
-        :src="`/state/scrape/${selected.id}/derived/tiles/${tileIndex.toString()}.png`"
-        loading="lazy"
-      />
+      <template v-if="selected">
+        <div class="meta">{{ selected.title }}<br />{{ selected.url }}</div>
+        <img
+          v-for="tileIndex in Array.from({ length: selected.numTiles }, (_, i) => i)"
+          :key="tileIndex"
+          :src="`/api/scrapes/${selected.id}/tiles/${tileIndex}`"
+          loading="lazy"
+        />
+      </template>
     </section>
   </main>
 </template>
@@ -176,5 +210,21 @@ section:nth-child(2) {
   bottom: 0;
   padding: 2px;
   background: #eee;
+}
+
+.loading,
+.error {
+  padding: 20px;
+  text-align: center;
+  font-size: 18px;
+}
+.loading {
+  color: #666;
+}
+.error {
+  color: #dc3545;
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
 }
 </style>
