@@ -5,6 +5,8 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
 
+    "noUncheckedIndexedAccess": true, // enabled by default in @vue/tsconfig 0.8.0
+
     "paths": {
       "@/*": ["./src/*"]
     }
