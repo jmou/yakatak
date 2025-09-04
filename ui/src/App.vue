@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, useTemplateRef } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, useTemplateRef, watch } from "vue";
 
 interface Card {
   id: string;
@@ -45,7 +45,6 @@ const detailsElem = useTemplateRef("detailsElem");
 
 function pickCard(index: number) {
   activePile.value.picked = index;
-  scrollToSelected();
   detailsElem.value!.focus();
 }
 
@@ -65,8 +64,6 @@ function deleteCard() {
   if (activePile.value.picked >= activePile.value.cards.length) {
     activePile.value.picked = activePile.value.cards.length - 1;
   }
-
-  scrollToSelected();
 }
 
 function moveCardToPile(pileIndex: number) {
@@ -83,26 +80,30 @@ function moveCardToPile(pileIndex: number) {
       Math.min(activePile.value.picked, activePile.value.cards.length - 1),
     );
   }
-
-  scrollToSelected();
-}
-
-// TODO scroll to active pile
-function scrollToSelected(behavior: ScrollBehavior = "smooth") {
-  nextTick(() =>
-    document.querySelector(".card.picked")?.scrollIntoView({ block: "nearest", behavior }),
-  );
 }
 
 function selectNextPile() {
   state.active = Math.min(state.active + 1, state.piles.length - 1);
-  scrollToSelected();
 }
 
 function selectPreviousPile() {
   state.active = Math.max(state.active - 1, 0);
-  scrollToSelected();
 }
+
+const activePileElem = ref<Element>();
+const pickedCardElems = Array.from({ length: state.piles.length }, () => ref<Element>());
+
+for (const source of pickedCardElems) {
+  // TODO use container: "nearest" to limit scrolling to the carousel
+  watch(source, (elem) => elem?.scrollIntoView({ block: "nearest" }));
+}
+// Without the above container option, this is fragile. Here we vertically
+// scroll the piles pane, deliberately placing it after any carousel scrolling
+// above by also watching pickedCardElems. This should correct any undesirable
+// vertical scrolling caused by scrolling card carousels.
+watch([activePileElem, ...pickedCardElems], ([elem]) => elem?.scrollIntoView({ block: "nearest" }));
+
+watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
 
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === "h") {
@@ -150,6 +151,7 @@ onMounted(async () => {
     </div>
     <div class="piles" tabindex="-1" @focus="detailsElem!.focus()">
       <section
+        :ref="(elem) => pileIndex == state.active && (activePileElem = elem as Element)"
         v-for="(pile, pileIndex) in state.piles"
         :key="pileIndex"
         :class="{ selected: pileIndex === state.active }"
@@ -157,6 +159,10 @@ onMounted(async () => {
         <header>{{ pileIndex }}</header>
         <div class="carousel">
           <a
+            :ref="
+              (elem) =>
+                cardIndex === pile.picked && (pickedCardElems[pileIndex]!.value = elem as Element)
+            "
             v-for="(card, cardIndex) in pile.cards"
             :key="card.id"
             class="card"
@@ -226,6 +232,8 @@ main {
   min-width: 300px;
   padding: 10px;
   overflow: auto;
+  scroll-behavior: smooth;
+  scroll-padding: 10px;
 
   display: flex;
   flex-direction: column;
@@ -247,6 +255,7 @@ main {
     display: flex;
     overflow: auto;
     padding: 4px 0 2px;
+    scroll-behavior: smooth;
 
     > a.card {
       display: block;
