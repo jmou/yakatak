@@ -206,6 +206,7 @@ main {
   border-right: 1px solid #ddd;
   overflow: auto;
   scrollbar-gutter: stable;
+  view-transition-name: details;
 
   /* We programatically focus the details pane, but don't emphasize it. */
   &:focus-visible {
@@ -329,6 +330,13 @@ main {
 <style>
 ::view-transition-group(root) {
   animation-duration: 0s;
+}
+
+/* Workaround to prevent cards from painting over the details pane; not an
+   actual transition. */
+::view-transition-group(details) {
+  animation-duration: 0s;
+  z-index: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
