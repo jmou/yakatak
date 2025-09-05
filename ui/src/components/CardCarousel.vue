@@ -113,6 +113,7 @@ watch(width, (newWidth, prevWidth) => {
   aspect-ratio: 5 / 7;
   border: 1px solid #ddd;
   border-radius: 6px;
+  opacity: 0.7;
   overflow: hidden;
   cursor: pointer;
 
@@ -121,6 +122,7 @@ watch(width, (newWidth, prevWidth) => {
 
   &.picked {
     border-color: #666;
+    opacity: 1;
   }
 
   &:first-child {
@@ -132,6 +134,7 @@ watch(width, (newWidth, prevWidth) => {
 
   &:hover {
     transform: translateY(-2px);
+    opacity: 1;
   }
 
   img {
