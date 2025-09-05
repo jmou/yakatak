@@ -263,7 +263,42 @@ main {
     display: flex;
     overflow: auto;
     padding: 4px 0 2px;
+
     scroll-behavior: smooth;
+    scrollbar-width: none;
+    --scroll-shadow-width: 15px;
+    &::before,
+    &::after {
+      content: "";
+      display: block;
+      flex: none;
+      position: sticky;
+      width: calc(2 * var(--scroll-shadow-width));
+      background: radial-gradient(farthest-side, rgb(0 0 0 / 0.25), rgb(0 0 0 / 0));
+      z-index: 1;
+      pointer-events: none;
+
+      animation-name: reveal, detect-scroll;
+      animation-timeline: scroll(x);
+      animation-fill-mode: both;
+
+      --visibility-if-can-scroll: var(--can-scroll) visible;
+      --visibility-if-cant-scroll: hidden;
+      visibility: var(--visibility-if-can-scroll, var(--visibility-if-cant-scroll));
+    }
+    &::before {
+      left: 0;
+      margin-right: calc(-2 * var(--scroll-shadow-width));
+      transform: translateX(-50%);
+      animation-range: 0 30px;
+    }
+    &::after {
+      right: 0;
+      margin-left: calc(-2 * var(--scroll-shadow-width));
+      transform: translateX(50%);
+      animation-direction: reverse;
+      animation-range: calc(100% - 30px) calc(100%);
+    }
 
     > a.card {
       display: block;
@@ -299,6 +334,20 @@ main {
   .selected .card.picked {
     border-color: #3b82f6;
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+  }
+}
+
+/* https://brm.us/css-can-scroll */
+@keyframes detect-scroll {
+  from,
+  to {
+    --can-scroll: ;
   }
 }
 
