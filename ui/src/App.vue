@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { refAutoReset, useFetch, whenever } from "@vueuse/core";
-import { computed, nextTick, reactive, ref, useTemplateRef, watch, watchEffect } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, useTemplateRef, watch, watchEffect } from "vue";
 import ChooserDialog from "./components/ChooserDialog.vue";
 import DetailsPane from "./components/DetailsPane.vue";
 import PilesPane from "./components/PilesPane.vue";
@@ -376,6 +376,8 @@ function onKeydown(event: KeyboardEvent) {
   events.push(event);
   if (!eventsPromise) eventsPromise = startEventProcessing();
 }
+
+onMounted(() => detailsElem.value!.focus());
 </script>
 
 <template>
@@ -386,7 +388,6 @@ function onKeydown(event: KeyboardEvent) {
       :card="pickedCard"
       v-model:elem="detailsElem"
       tabindex="0"
-      autofocus
       @keydown="onKeydown"
     />
     <PilesPane
