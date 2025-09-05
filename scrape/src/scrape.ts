@@ -50,8 +50,13 @@ class ScrapeRecorder {
 
 async function main() {
   await using recorder = new ScrapeRecorder("state/scrape");
-  for (const url of process.argv.slice(2)) {
-    await recorder.scrape(url);
+  for (const outcome of await Promise.allSettled(
+    process.argv.slice(2).map((url) => recorder.scrape(url)),
+  )) {
+    if (outcome.status === "rejected") {
+      console.error(`Failed to scrape: ${outcome.reason}`);
+      process.exitCode = 1;
+    }
   }
 }
 
