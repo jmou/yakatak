@@ -105,6 +105,17 @@ watch([activePileElem, ...pickedCardElems], ([elem]) => elem?.scrollIntoView({ b
 
 watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
 
+function viewTransition(fn: () => void) {
+  if (!document.startViewTransition) {
+    fn();
+  } else {
+    document.startViewTransition(() => {
+      fn();
+      return nextTick();
+    });
+  }
+}
+
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === "h") {
     pickPreviousCard();
@@ -123,7 +134,8 @@ function handleKeydown(event: KeyboardEvent) {
   } else if (event.key === "d") {
     deleteCard();
   } else if (event.key >= "0" && event.key <= "9") {
-    moveCardToPile(parseInt(event.key));
+    const pileIndex = parseInt(event.key);
+    viewTransition(() => moveCardToPile(pileIndex));
   }
 }
 
@@ -167,6 +179,7 @@ onMounted(async () => {
             :key="card.id"
             class="card"
             :class="{ picked: cardIndex === pile.picked }"
+            :style="{ viewTransitionName: `card-${card.id.replace('.', '_')}` }"
             :href="card.url"
             @click.exact.prevent="
               state.active = pileIndex;
@@ -282,6 +295,7 @@ main {
 
   .card {
     border: 2px solid transparent;
+    view-transition-class: card;
     &.picked {
       border-color: #888;
     }
@@ -309,5 +323,17 @@ main {
   background: #f8d7da;
   border: 1px solid #f5c6cb;
   border-radius: 4px;
+}
+</style>
+
+<style>
+::view-transition-group(root) {
+  animation-duration: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(.card) {
+    animation-duration: 0s;
+  }
 }
 </style>
