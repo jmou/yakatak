@@ -51,16 +51,16 @@ const pickedCard = computed(() => activePile.value.cards?.[activePile.value.pick
 
 function moveCardToPile(pileIndex: number | null) {
   if (!pickedCard.value) return;
-  if (pileIndex != null && state.piles[pileIndex] == null) return;
+  const targetPile = pileIndex == null ? null : state.piles[pileIndex];
+  if (targetPile === undefined) return;
 
-  const card = activePile.value.cards.splice(activePile.value.picked, 1)[0]!;
-  if (pileIndex != null) {
-    state.piles[pileIndex]!.cards.push(card);
-  }
-
-  if (activePile.value.picked >= activePile.value.cards.length) {
-    activePile.value.picked = activePile.value.cards.length - 1;
-  }
+  viewTransition(() => {
+    const card = activePile.value.cards.splice(activePile.value.picked, 1)[0]!;
+    if (targetPile !== null) {
+      targetPile.cards.push(card);
+    }
+    activePile.value.pickCardClamped(activePile.value.picked);
+  });
 }
 
 function discardCard() {
@@ -93,9 +93,9 @@ function onKeydown(event: KeyboardEvent) {
     activePile.value.pickCardClamped(activePile.value.picked - 1);
   } else if (event.key === "l") {
     activePile.value.pickCardClamped(activePile.value.picked + 1);
-  } else if (event.key === "H") {
+  } else if (event.key === "H" || event.key === "^") {
     activePile.value.pickCardClamped(0);
-  } else if (event.key === "L") {
+  } else if (event.key === "L" || event.key === "$") {
     activePile.value.pickCardClamped(activePile.value.cards.length - 1);
   } else if (event.key === "j") {
     state.active = Math.min(state.active + 1, state.piles.length - 1);
@@ -104,10 +104,12 @@ function onKeydown(event: KeyboardEvent) {
   } else if (event.key === "o") {
     if (pickedCard.value) open(pickedCard.value.url);
   } else if (event.key === "d") {
-    viewTransition(discardCard);
+    discardCard();
   } else if (event.key >= "0" && event.key <= "9") {
-    const pileIndex = parseInt(event.key);
-    viewTransition(() => moveCardToPile(pileIndex));
+    moveCardToPile(parseInt(event.key));
+  } else if (event.key === "R") {
+    activePile.value.cards.reverse();
+    activePile.value.picked = activePile.value.cards.length - 1 - activePile.value.picked;
   }
 }
 

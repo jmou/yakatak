@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watchEffect } from "vue";
+import { ref, watch } from "vue";
 import type { Card } from "../lib/types.ts";
 
 interface Props {
@@ -16,12 +16,16 @@ const emit = defineEmits<{
 
 const pickedCardElem = ref<Element>();
 
-watchEffect(() => {
-  if (pickedCardElem.value == null) return;
-  // TODO use container: "nearest" to limit scrolling to the carousel
-  pickedCardElem.value.scrollIntoView({ block: "nearest" });
-  emit("autoScroll");
-});
+watch(
+  () => props.picked,
+  () => {
+    if (pickedCardElem.value == null) return;
+    // TODO use container: "nearest" to limit scrolling to the carousel
+    pickedCardElem.value.scrollIntoView({ block: "nearest" });
+    emit("autoScroll");
+  },
+  { flush: "post" },
+);
 </script>
 
 <template>
