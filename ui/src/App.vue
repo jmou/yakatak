@@ -157,6 +157,8 @@ onMounted(async () => {
           v-for="tileIndex in Array.from({ length: pickedCard.numTiles }, (_, i) => i)"
           :key="tileIndex"
           :src="`/api/scrapes/${pickedCard.id}/tiles/${tileIndex}`"
+          width="1024"
+          :height="tileIndex < pickedCard.numTiles - 1 ? 1024 : undefined"
           loading="lazy"
         />
       </template>
@@ -211,14 +213,6 @@ main {
   /* We programatically focus the details pane, but don't emphasize it. */
   &:focus-visible {
     outline: none;
-  }
-
-  > img {
-    width: 1024px;
-    height: 1024px;
-    &:last-child {
-      height: auto;
-    }
   }
 
   /* Keep the content from collapsing when no card is selected; we can't easily
