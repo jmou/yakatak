@@ -56,30 +56,22 @@ function pickPreviousCard() {
   pickCard(Math.max(activePile.value.picked - 1, 0));
 }
 
-// TODO animate
-function deleteCard() {
-  if (activePile.value.cards.length <= 1) return;
+function moveCardToPile(pileIndex: number | null) {
+  if (!pickedCard.value) return;
+  if (pileIndex != null && state.piles[pileIndex] == null) return;
 
-  activePile.value.cards.splice(activePile.value.picked, 1);
+  const card = activePile.value.cards.splice(activePile.value.picked, 1)[0]!;
+  if (pileIndex != null) {
+    state.piles[pileIndex]!.cards.push(card);
+  }
+
   if (activePile.value.picked >= activePile.value.cards.length) {
     activePile.value.picked = activePile.value.cards.length - 1;
   }
 }
 
-function moveCardToPile(pileIndex: number) {
-  if (!pickedCard.value || pileIndex < 0 || pileIndex >= state.piles.length) return;
-
-  const card = activePile.value.cards.splice(activePile.value.picked, 1)[0]!;
-  state.piles[pileIndex]!.cards.push(card);
-
-  if (activePile.value.cards.length === 0) {
-    activePile.value.picked = 0;
-  } else {
-    activePile.value.picked = Math.max(
-      0,
-      Math.min(activePile.value.picked, activePile.value.cards.length - 1),
-    );
-  }
+function discardCard() {
+  moveCardToPile(null);
 }
 
 function selectNextPile() {
@@ -132,7 +124,7 @@ function handleKeydown(event: KeyboardEvent) {
   } else if (event.key === "o") {
     if (pickedCard.value) open(pickedCard.value.url);
   } else if (event.key === "d") {
-    deleteCard();
+    viewTransition(discardCard);
   } else if (event.key >= "0" && event.key <= "9") {
     const pileIndex = parseInt(event.key);
     viewTransition(() => moveCardToPile(pileIndex));
@@ -380,6 +372,17 @@ main {
 ::view-transition-group(details) {
   animation-duration: 0s;
   z-index: 1;
+}
+
+@keyframes slide-up {
+  to {
+    opacity: 0;
+    transform: translateY(-20%);
+  }
+}
+
+::view-transition-old(.card):only-child {
+  animation-name: slide-up;
 }
 
 @media (prefers-reduced-motion: reduce) {
