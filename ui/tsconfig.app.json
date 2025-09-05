@@ -5,6 +5,7 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
 
+    "erasableSyntaxOnly": true,
     "noUncheckedIndexedAccess": true, // enabled by default in @vue/tsconfig 0.8.0
 
     "paths": {

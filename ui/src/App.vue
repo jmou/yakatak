@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, useTemplateRef, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  reactive,
+  ref,
+  useTemplateRef,
+  watch,
+  watchEffect,
+} from "vue";
+import CardCarousel from "./components/CardCarousel.vue";
+import type { Card } from "./lib/types.ts";
 
-interface Card {
-  id: string;
-  url: string;
-  title: string;
-  numTiles: number;
-}
+class Pile {
+  cards: Card[] = [];
+  picked = 0;
 
-interface Pile {
-  cards: Card[];
-  picked: number;
+  pickCardClamped(cardIndex: number) {
+    this.picked = Math.max(0, Math.min(cardIndex, this.cards.length - 1));
+  }
 }
 
 const loading = ref(true);
@@ -34,27 +42,12 @@ async function init() {
 
 const state = reactive({
   // TODO something better than statically allocated piles
-  piles: Array.from({ length: 10 }, () => ({ cards: [], picked: 0 }) as Pile),
+  piles: Array.from({ length: 10 }, () => new Pile()),
   active: 0,
 });
 
 const activePile = computed(() => state.piles[state.active]!);
 const pickedCard = computed(() => activePile.value.cards?.[activePile.value.picked]);
-
-const detailsElem = useTemplateRef("detailsElem");
-
-function pickCard(index: number) {
-  activePile.value.picked = index;
-  detailsElem.value!.focus();
-}
-
-function pickNextCard() {
-  pickCard(Math.min(activePile.value.picked + 1, activePile.value.cards.length - 1));
-}
-
-function pickPreviousCard() {
-  pickCard(Math.max(activePile.value.picked - 1, 0));
-}
 
 function moveCardToPile(pileIndex: number | null) {
   if (!pickedCard.value) return;
@@ -74,26 +67,13 @@ function discardCard() {
   moveCardToPile(null);
 }
 
-function selectNextPile() {
-  state.active = Math.min(state.active + 1, state.piles.length - 1);
-}
-
-function selectPreviousPile() {
-  state.active = Math.max(state.active - 1, 0);
-}
-
+const detailsElem = useTemplateRef("detailsElem");
 const activePileElem = ref<Element>();
-const pickedCardElems = Array.from({ length: state.piles.length }, () => ref<Element>());
 
-for (const source of pickedCardElems) {
-  // TODO use container: "nearest" to limit scrolling to the carousel
-  watch(source, (elem) => elem?.scrollIntoView({ block: "nearest" }));
+function scrollToActivePile() {
+  activePileElem.value?.scrollIntoView({ block: "nearest" });
 }
-// Without the above container option, this is fragile. Here we vertically
-// scroll the piles pane, deliberately placing it after any carousel scrolling
-// above by also watching pickedCardElems. This should correct any undesirable
-// vertical scrolling caused by scrolling card carousels.
-watch([activePileElem, ...pickedCardElems], ([elem]) => elem?.scrollIntoView({ block: "nearest" }));
+watchEffect(scrollToActivePile);
 
 watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
 
@@ -108,19 +88,19 @@ function viewTransition(fn: () => void) {
   }
 }
 
-function handleKeydown(event: KeyboardEvent) {
+function onKeydown(event: KeyboardEvent) {
   if (event.key === "h") {
-    pickPreviousCard();
+    activePile.value.pickCardClamped(activePile.value.picked - 1);
   } else if (event.key === "l") {
-    pickNextCard();
+    activePile.value.pickCardClamped(activePile.value.picked + 1);
   } else if (event.key === "H") {
-    pickCard(0);
+    activePile.value.pickCardClamped(0);
   } else if (event.key === "L") {
-    pickCard(activePile.value.cards.length - 1);
+    activePile.value.pickCardClamped(activePile.value.cards.length - 1);
   } else if (event.key === "j") {
-    selectNextPile();
+    state.active = Math.min(state.active + 1, state.piles.length - 1);
   } else if (event.key === "k") {
-    selectPreviousPile();
+    state.active = Math.max(state.active - 1, 0);
   } else if (event.key === "o") {
     if (pickedCard.value) open(pickedCard.value.url);
   } else if (event.key === "d") {
@@ -139,7 +119,7 @@ onMounted(async () => {
 
 <template>
   <main>
-    <div ref="detailsElem" class="details" tabindex="0" @keydown="handleKeydown">
+    <div ref="detailsElem" class="details" tabindex="0" @keydown="onKeydown">
       <div class="spacer"></div>
       <div v-if="loading" class="loading">Loading deck...</div>
       <div v-else-if="error" class="error">{{ error }}</div>
@@ -161,28 +141,15 @@ onMounted(async () => {
         v-for="(pile, pileIndex) in state.piles"
         :key="pileIndex"
         :class="{ selected: pileIndex === state.active }"
+        @click="state.active = pileIndex"
       >
         <header>{{ pileIndex }}</header>
-        <div class="carousel">
-          <a
-            :ref="
-              (elem) =>
-                cardIndex === pile.picked && (pickedCardElems[pileIndex]!.value = elem as Element)
-            "
-            v-for="(card, cardIndex) in pile.cards"
-            :key="card.id"
-            class="card"
-            :class="{ picked: cardIndex === pile.picked }"
-            :style="{ viewTransitionName: `card-${card.id.replace('.', '_')}` }"
-            :href="card.url"
-            @click.exact.prevent="
-              state.active = pileIndex;
-              pickCard(cardIndex);
-            "
-          >
-            <img :src="`/api/scrapes/${card.id}/thumb`" :alt="card.title" :title="card.title" />
-          </a>
-        </div>
+        <CardCarousel
+          :cards="pile.cards"
+          :picked="pile.picked"
+          @pick="(cardIndex) => pile.pickCardClamped(cardIndex)"
+          @auto-scroll="scrollToActivePile"
+        />
       </section>
     </div>
   </main>
@@ -246,100 +213,13 @@ main {
     display: flex;
     flex-direction: column;
 
+    &.selected {
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+    }
+
     > header {
       font-weight: bold;
     }
-  }
-
-  .carousel {
-    display: flex;
-    overflow: auto;
-    padding: 4px 0 2px;
-
-    scroll-behavior: smooth;
-    scrollbar-width: none;
-    --scroll-shadow-width: 15px;
-    &::before,
-    &::after {
-      content: "";
-      display: block;
-      flex: none;
-      position: sticky;
-      width: calc(2 * var(--scroll-shadow-width));
-      background: radial-gradient(farthest-side, rgb(0 0 0 / 0.25), rgb(0 0 0 / 0));
-      z-index: 1;
-      pointer-events: none;
-
-      animation-name: reveal, detect-scroll;
-      animation-timeline: scroll(x);
-      animation-fill-mode: both;
-
-      --visibility-if-can-scroll: var(--can-scroll) visible;
-      --visibility-if-cant-scroll: hidden;
-      visibility: var(--visibility-if-can-scroll, var(--visibility-if-cant-scroll));
-    }
-    &::before {
-      left: 0;
-      margin-right: calc(-2 * var(--scroll-shadow-width));
-      transform: translateX(-50%);
-      animation-range: 0 30px;
-    }
-    &::after {
-      right: 0;
-      margin-left: calc(-2 * var(--scroll-shadow-width));
-      transform: translateX(50%);
-      animation-direction: reverse;
-      animation-range: calc(100% - 30px) calc(100%);
-    }
-
-    > a.card {
-      display: block;
-      flex: none;
-      aspect-ratio: 5 / 7;
-      overflow: hidden;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: transform 0.15s ease;
-
-      &:hover {
-        transform: translateY(-2px);
-      }
-
-      img {
-        /* Aim for ~20% of original scale. */
-        height: 150px;
-        /* Constrain to at least 2/3 of the original viewport height. */
-        min-height: 100%;
-        max-height: 150%;
-      }
-    }
-  }
-
-  .card {
-    border: 2px solid transparent;
-    view-transition-class: card;
-    &.picked {
-      border-color: #888;
-    }
-  }
-  .selected,
-  .selected .card.picked {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
-  }
-}
-
-@keyframes reveal {
-  from {
-    opacity: 0;
-  }
-}
-
-/* https://brm.us/css-can-scroll */
-@keyframes detect-scroll {
-  from,
-  to {
-    --can-scroll: ;
   }
 }
 
@@ -359,35 +239,5 @@ main {
   background: #f8d7da;
   border: 1px solid #f5c6cb;
   border-radius: 4px;
-}
-</style>
-
-<style>
-::view-transition-group(root) {
-  animation-duration: 0s;
-}
-
-/* Workaround to prevent cards from painting over the details pane; not an
-   actual transition. */
-::view-transition-group(details) {
-  animation-duration: 0s;
-  z-index: 1;
-}
-
-@keyframes slide-up {
-  to {
-    opacity: 0;
-    transform: translateY(-20%);
-  }
-}
-
-::view-transition-old(.card):only-child {
-  animation-name: slide-up;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(.card) {
-    animation-duration: 0s;
-  }
 }
 </style>
