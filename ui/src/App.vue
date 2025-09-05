@@ -149,6 +149,7 @@ onMounted(async () => {
           :picked="pile.picked"
           @pick="(cardIndex) => pile.pickCardClamped(cardIndex)"
           @auto-scroll="scrollToActivePile"
+          @focus="detailsElem!.focus()"
         />
       </section>
     </div>

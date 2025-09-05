@@ -34,6 +34,7 @@ watchEffect(() => {
       :class="{ picked: cardIndex === picked }"
       :style="{ viewTransitionName: `card-${card.id.replace('.', '_')}` }"
       @click.exact.prevent="$emit('pick', cardIndex)"
+      @focus="(event) => ($attrs.onFocus as any)(event)"
       :ref="(elem) => cardIndex === picked && (pickedCardElem = elem as Element)"
     >
       <img :src="`/api/scrapes/${card.id}/thumb`" :alt="card.title" :title="card.title" />
