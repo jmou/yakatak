@@ -164,9 +164,10 @@ main {
 .details {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #ddd;
+  border-right: 1px solid #ccc;
   overflow: auto;
   scrollbar-gutter: stable;
+  scrollbar-color: #666 #eee;
   view-transition-name: details;
 
   /* We programatically focus the details pane, but don't emphasize it. */
@@ -197,8 +198,10 @@ main {
 .piles {
   flex: 1;
   min-width: 300px;
-  padding: 10px;
+  padding: 5px;
+  background: #ddd;
   overflow: auto;
+  scrollbar-color: #666 #ddd;
   scroll-behavior: smooth;
   scroll-padding: 10px;
 
@@ -207,14 +210,22 @@ main {
   gap: 20px;
 
   > section {
+    --pile-padding: 5px;
+
     flex: none;
     height: 180px;
+    padding: var(--pile-padding);
+    padding-bottom: 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #eee;
 
     display: flex;
     flex-direction: column;
 
     &.selected {
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+      border-color: #888;
+      outline: 3px solid #acf;
     }
 
     > header {
@@ -239,5 +250,13 @@ main {
   background: #f8d7da;
   border: 1px solid #f5c6cb;
   border-radius: 4px;
+}
+</style>
+
+<style>
+:root {
+  font-family: system-ui, Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  background: #eee;
 }
 </style>

@@ -46,19 +46,22 @@ watchEffect(() => {
   display: flex;
   overflow: auto;
   padding: 4px 0 2px;
+  margin: 0 calc(-1 * var(--pile-padding));
+  gap: 3px;
 
+  --gutter-width: 5px;
+  --scroll-shadow-width: 20px;
   scroll-behavior: smooth;
+  scroll-padding: calc(var(--gutter-width) + 5px);
   scrollbar-width: none;
-  --scroll-shadow-width: 15px;
   &::before,
   &::after {
     content: "";
     display: block;
     flex: none;
     position: sticky;
-    width: calc(2 * var(--scroll-shadow-width));
-    background: radial-gradient(farthest-side, rgb(0 0 0 / 0.25), rgb(0 0 0 / 0));
-    z-index: 1;
+    width: var(--scroll-shadow-width);
+    z-index: 2;
     pointer-events: none;
 
     animation-name: reveal, detect-scroll;
@@ -71,16 +74,16 @@ watchEffect(() => {
   }
   &::before {
     left: 0;
-    margin-right: calc(-2 * var(--scroll-shadow-width));
-    transform: translateX(-50%);
-    animation-range: 0 30px;
+    margin-right: calc(-1 * var(--scroll-shadow-width));
+    background: radial-gradient(farthest-side at 0% 50%, #0005, #0003 50%, transparent);
+    animation-range: var(--gutter-width) 30px;
   }
   &::after {
     right: 0;
-    margin-left: calc(-2 * var(--scroll-shadow-width));
-    transform: translateX(50%);
+    margin-left: calc(-1 * var(--scroll-shadow-width));
+    background: radial-gradient(farthest-side at 100% 50%, #0005, #0003 50%, transparent);
     animation-direction: reverse;
-    animation-range: calc(100% - 30px) calc(100%);
+    animation-range: calc(100% - 30px) calc(100% - var(--gutter-width));
   }
 }
 
@@ -88,7 +91,7 @@ watchEffect(() => {
   display: block;
   flex: none;
   aspect-ratio: 5 / 7;
-  border: 2px solid transparent;
+  border: 1px solid #ddd;
   border-radius: 6px;
   overflow: hidden;
   cursor: pointer;
@@ -97,7 +100,14 @@ watchEffect(() => {
   view-transition-class: card;
 
   &.picked {
-    border-color: #888;
+    border-color: #666;
+  }
+
+  &:first-child {
+    margin-left: var(--gutter-width);
+  }
+  &:last-child {
+    margin-right: var(--gutter-width);
   }
 
   &:hover {
@@ -117,8 +127,11 @@ watchEffect(() => {
    the nested selectors work as expected. */
 :global(.selected) {
   .card.picked {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+    border-color: #38f;
+    outline: 3px solid #acf;
+    /* This is not normally significant, but it paints view transitions above
+       other cards. */
+    z-index: 1;
   }
 }
 
