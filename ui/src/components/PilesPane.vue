@@ -24,6 +24,7 @@ const active = defineModel("active");
       <CardCarousel
         :cards="pile.cards"
         :picked="pile.picked"
+        class="carousel"
         @pick="(cardIndex) => pile.pickCardClamped(cardIndex)"
         v-on="{ autoScroll: $attrs.onAutoScroll, focus: $attrs.onFocus }"
       />
@@ -68,6 +69,10 @@ section {
 
   > header {
     font-weight: bold;
+  }
+
+  > .carousel {
+    margin: 0 calc(-1 * var(--pile-padding));
   }
 }
 </style>

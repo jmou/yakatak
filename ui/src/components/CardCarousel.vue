@@ -37,7 +37,7 @@ watchEffect(
       :class="{ picked: cardIndex === picked }"
       :style="{ viewTransitionName: `card-${card.id.replace('.', '_')}` }"
       @click.exact.prevent="$emit('pick', cardIndex)"
-      @focus="(event) => ($attrs.onFocus as any)(event)"
+      v-on="{ focus: $attrs.onFocus }"
       :ref="(elem) => (card.elem = elem as Element)"
     >
       <img :src="`/api/scrapes/${card.id}/thumb`" :alt="card.title" :title="card.title" />
@@ -50,7 +50,6 @@ watchEffect(
   display: flex;
   overflow: auto;
   padding: 4px 0 2px;
-  margin: 0 calc(-1 * var(--pile-padding));
   gap: 3px;
 
   --gutter-width: 5px;
