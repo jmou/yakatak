@@ -9,17 +9,8 @@ import {
   watch,
   watchEffect,
 } from "vue";
-import CardCarousel from "./components/CardCarousel.vue";
-import type { Card } from "./lib/types.ts";
-
-class Pile {
-  cards: Card[] = [];
-  picked = 0;
-
-  pickCardClamped(cardIndex: number) {
-    this.picked = Math.max(0, Math.min(cardIndex, this.cards.length - 1));
-  }
-}
+import CardPile from "./components/CardPile.vue";
+import { Pile, type Card } from "./lib/types.ts";
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -68,10 +59,9 @@ function discardCard() {
 }
 
 const detailsElem = useTemplateRef("detailsElem");
-const activePileElem = ref<Element>();
 
 function scrollToActivePile() {
-  activePileElem.value?.scrollIntoView({ block: "nearest" });
+  activePile.value.elem?.scrollIntoView({ block: "nearest" });
 }
 watchEffect(scrollToActivePile);
 
@@ -138,22 +128,16 @@ onMounted(async () => {
       </template>
     </div>
     <div class="piles" tabindex="-1" @focus="detailsElem!.focus()">
-      <section
-        :ref="(elem) => pileIndex == state.active && (activePileElem = elem as Element)"
+      <CardPile
         v-for="(pile, pileIndex) in state.piles"
         :key="pileIndex"
-        :class="{ selected: pileIndex === state.active }"
+        :pile
+        :pile-index
+        :is-active="pileIndex === state.active"
         @click="state.active = pileIndex"
-      >
-        <header>{{ pileIndex }}</header>
-        <CardCarousel
-          :cards="pile.cards"
-          :picked="pile.picked"
-          @pick="(cardIndex) => pile.pickCardClamped(cardIndex)"
-          @auto-scroll="scrollToActivePile"
-          @focus="detailsElem!.focus()"
-        />
-      </section>
+        @auto-scroll="scrollToActivePile"
+        @focus="detailsElem!.focus()"
+      />
     </div>
   </main>
 </template>
@@ -211,30 +195,6 @@ main {
   display: flex;
   flex-direction: column;
   gap: 20px;
-
-  > section {
-    --pile-padding: 5px;
-
-    flex: none;
-    height: 180px;
-    padding: var(--pile-padding);
-    padding-bottom: 0;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    background: #eee;
-
-    display: flex;
-    flex-direction: column;
-
-    &.selected {
-      border-color: #888;
-      outline: 3px solid #acf;
-    }
-
-    > header {
-      font-weight: bold;
-    }
-  }
 }
 
 .loading,
