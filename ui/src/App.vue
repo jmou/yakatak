@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch, watchEffect } from "vue";
-import CardPile from "./components/CardPile.vue";
 import DetailsPane from "./components/DetailsPane.vue";
+import PilesPane from "./components/PilesPane.vue";
 import { Card, Pile, type CardData } from "./lib/types.ts";
 
 const loading = ref(true);
@@ -111,18 +111,13 @@ onMounted(async () => {
       tabindex="0"
       @keydown="onKeydown"
     />
-    <div class="piles" tabindex="-1" @focus="detailsElem!.focus()">
-      <CardPile
-        v-for="(pile, pileIndex) in state.piles"
-        :key="pileIndex"
-        :pile
-        :pile-index
-        :is-active="pileIndex === state.active"
-        @click="state.active = pileIndex"
-        @auto-scroll="scrollToActivePile"
-        @focus="detailsElem!.focus()"
-      />
-    </div>
+    <PilesPane
+      v-model:active="state.active"
+      :piles="state.piles"
+      tabindex="-1"
+      @auto-scroll="scrollToActivePile"
+      @focus="detailsElem!.focus()"
+    />
   </main>
 </template>
 
@@ -130,21 +125,6 @@ onMounted(async () => {
 main {
   display: flex;
   height: 100vh;
-}
-
-.piles {
-  flex: 1;
-  min-width: 300px;
-  padding: 5px;
-  background: #ddd;
-  overflow: auto;
-  scrollbar-color: #666 #ddd;
-  scroll-behavior: smooth;
-  scroll-padding: 10px;
-
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }
 </style>
 
