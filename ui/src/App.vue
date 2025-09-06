@@ -30,25 +30,7 @@ const state = reactive({
 });
 
 const activePile = computed(() => state.piles[state.active]!);
-const activePickedCard = computed(() => activePile.value.cards?.[activePile.value.picked]);
-
-function moveCardToPile(pileIndex: number | null) {
-  if (!activePickedCard.value) return;
-  const targetPile = pileIndex == null ? null : state.piles[pileIndex];
-  if (targetPile === undefined) return;
-
-  viewTransition(() => {
-    const card = activePile.value.cards.splice(activePile.value.picked, 1)[0]!;
-    if (targetPile !== null) {
-      targetPile.cards.push(card);
-    }
-    activePile.value.pickCardClamped(activePile.value.picked);
-  });
-}
-
-function discardCard() {
-  moveCardToPile(null);
-}
+const pickedCard = computed(() => activePile.value.cards?.[activePile.value.picked]);
 
 const detailsElem = ref<HTMLElement>();
 
@@ -57,7 +39,7 @@ function scrollToActivePile() {
 }
 watchEffect(scrollToActivePile);
 
-watch(activePickedCard, () => (detailsElem.value!.scrollTop = 0));
+watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
 
 function viewTransition(fn: () => void) {
   if (!document.startViewTransition) {
@@ -70,29 +52,67 @@ function viewTransition(fn: () => void) {
   }
 }
 
+function movePickedCardToPile(pileIndex: number | null) {
+  if (!pickedCard.value) return;
+  const targetPile = pileIndex == null ? null : state.piles[pileIndex];
+  if (targetPile === undefined) return;
+
+  viewTransition(() => {
+    const card = activePile.value.cards.splice(activePile.value.picked, 1)[0]!;
+    if (targetPile !== null) {
+      targetPile.cards.push(card);
+    }
+    activePile.value.pickCardClamped(activePile.value.picked);
+  });
+}
+
+const discardPickedCard = () => movePickedCardToPile(null);
+
+const pickCardLeft = () => activePile.value.pickCardClamped(activePile.value.picked - 1);
+const pickCardRight = () => activePile.value.pickCardClamped(activePile.value.picked + 1);
+const pickCardFirst = () => activePile.value.pickCardClamped(0);
+const pickCardLast = () => activePile.value.pickCardClamped(activePile.value.cards.length - 1);
+
+const activatePileUp = () => (state.active = Math.max(state.active - 1, 0));
+const activatePileDown = () => (state.active = Math.min(state.active + 1, state.piles.length - 1));
+
+const openPickedCardPage = () => {
+  if (pickedCard.value) open(pickedCard.value.url);
+};
+
+const reverseActivePile = () => {
+  activePile.value.cards.reverse();
+  activePile.value.picked = activePile.value.cards.length - 1 - activePile.value.picked;
+};
+
+const rootKeyBindings: Record<string, () => void> = {
+  h: pickCardLeft,
+  j: activatePileDown,
+  k: activatePileUp,
+  l: pickCardRight,
+
+  "^": pickCardFirst,
+  $: pickCardLast,
+
+  "0": () => movePickedCardToPile(0),
+  "1": () => movePickedCardToPile(1),
+  "2": () => movePickedCardToPile(2),
+  "3": () => movePickedCardToPile(3),
+  "4": () => movePickedCardToPile(4),
+  "5": () => movePickedCardToPile(5),
+  "6": () => movePickedCardToPile(6),
+  "7": () => movePickedCardToPile(7),
+  "8": () => movePickedCardToPile(8),
+  "9": () => movePickedCardToPile(9),
+
+  o: openPickedCardPage,
+  d: discardPickedCard,
+
+  R: reverseActivePile,
+};
+
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === "h") {
-    activePile.value.pickCardClamped(activePile.value.picked - 1);
-  } else if (event.key === "l") {
-    activePile.value.pickCardClamped(activePile.value.picked + 1);
-  } else if (event.key === "H" || event.key === "^") {
-    activePile.value.pickCardClamped(0);
-  } else if (event.key === "L" || event.key === "$") {
-    activePile.value.pickCardClamped(activePile.value.cards.length - 1);
-  } else if (event.key === "j") {
-    state.active = Math.min(state.active + 1, state.piles.length - 1);
-  } else if (event.key === "k") {
-    state.active = Math.max(state.active - 1, 0);
-  } else if (event.key === "o") {
-    if (activePickedCard.value) open(activePickedCard.value.url);
-  } else if (event.key === "d") {
-    discardCard();
-  } else if (event.key >= "0" && event.key <= "9") {
-    moveCardToPile(parseInt(event.key));
-  } else if (event.key === "R") {
-    activePile.value.cards.reverse();
-    activePile.value.picked = activePile.value.cards.length - 1 - activePile.value.picked;
-  }
+  rootKeyBindings[event.key]?.();
 }
 
 onMounted(async () => {
@@ -106,7 +126,7 @@ onMounted(async () => {
     <DetailsPane
       :loading
       :error
-      :card="activePickedCard"
+      :card="pickedCard"
       v-model:elem="detailsElem"
       tabindex="0"
       @keydown="onKeydown"
