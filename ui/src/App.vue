@@ -46,6 +46,7 @@ const state = reactive({
   piles: [new Pile()],
   active: 0,
   opLog: [] as OpLogEntry[],
+  opLogIndex: 0,
 });
 
 const activePile = computed(() => checked(state.piles[state.active]));
@@ -114,20 +115,31 @@ function createPileAt(pileIndex: number): Command {
   return ["removePile", pileIndex];
 }
 
-function swapPiles(aPileIndex: number, bPileIndex: number): Command | void{
+function swapPiles(aPileIndex: number, bPileIndex: number): Command | void {
   const [aPile, bPile] = [state.piles[aPileIndex], state.piles[bPileIndex]];
   if (!aPile || !bPile) return;
   [state.piles[aPileIndex], state.piles[bPileIndex]] = [bPile, aPile];
   return ["swapPiles", aPileIndex, bPileIndex];
 }
 
-function undo() {
-  // TODO retain entry for redo
-  const entry = state.opLog.pop();
+function applyOpLogReverse() {
+  const entry = state.opLog[state.opLogIndex - 1];
   if (!entry) return;
+  
   invokeCommand(entry.reverse);
   state.active = entry.location.pileIndex;
   activePile.value.picked = entry.location.cardIndex;
+  state.opLogIndex--;
+}
+
+function applyOpLogForward() {
+  const entry = state.opLog[state.opLogIndex];
+  if (!entry) return;
+
+  state.active = entry.location.pileIndex;
+  activePile.value.picked = entry.location.cardIndex;
+  invokeCommand(entry.forward);
+  state.opLogIndex++;
 }
 
 // Perform the operation requested by the Command.
@@ -168,7 +180,8 @@ const opsByName = {
   swapActivePileUp: () => swapPiles(state.active, --state.active),
   swapActivePileDown: () => swapPiles(state.active, ++state.active),
 
-  undo,
+  applyOpLogReverse,
+  applyOpLogForward,
   irreversible: () => assert(false),
 };
 
@@ -202,7 +215,8 @@ const rootKeyBindings: Record<string, Command> = {
   O: ["createPileUp"],
   R: ["reverseCardsInPile"],
 
-  u: ["undo"],
+  u: ["applyOpLogReverse"],
+  U: ["applyOpLogForward"],
 };
 
 function onKeydown(event: KeyboardEvent) {
@@ -211,7 +225,10 @@ function onKeydown(event: KeyboardEvent) {
 
   const location = currentLocation.value;
   const reverse = invokeCommand(forward);
-  if (reverse) state.opLog.push({ forward, reverse, location });
+  if (reverse) {
+    state.opLog.splice(state.opLogIndex);
+    state.opLog[state.opLogIndex++] = { forward, reverse, location };
+  }
 }
 
 onMounted(async () => {
