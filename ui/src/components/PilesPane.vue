@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Pile } from "../lib/types.ts";
+import type { Pile } from "../lib/common.ts";
 import CardCarousel from "./CardCarousel.vue";
 
 interface Props {

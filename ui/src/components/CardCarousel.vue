@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { watchEffect } from "vue";
-import type { Card } from "../lib/types.ts";
+import type { Card } from "../lib/common.ts";
 
 interface Props {
   cards: Card[];

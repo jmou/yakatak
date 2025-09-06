@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch, watchEffect } from "vue";
 import DetailsPane from "./components/DetailsPane.vue";
 import PilesPane from "./components/PilesPane.vue";
-import { Card, Pile, type CardData } from "./lib/types.ts";
+import { assert, Card, checked, Pile, type CardData } from "./lib/common.ts";
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -28,7 +28,7 @@ const state = reactive({
   active: 0,
 });
 
-const activePile = computed(() => state.piles[state.active]!);
+const activePile = computed(() => checked(state.piles[state.active]));
 const pickedCard = computed(() => activePile.value.cards?.[activePile.value.picked]);
 
 // Bounds constrain active.
@@ -43,7 +43,7 @@ watchEffect(() => {
 const detailsElem = ref<HTMLElement>();
 
 function scrollToActivePile() {
-  activePile.value.elem?.scrollIntoView({ block: "nearest" });
+  activePile.value.elem?.scrollIntoView?.({ block: "nearest" });
 }
 watchEffect(scrollToActivePile);
 
@@ -66,7 +66,8 @@ function movePickedCardToPile(pileIndex: number | null) {
   if (targetPile === undefined) return;
 
   viewTransition(() => {
-    const card = activePile.value.cards.splice(activePile.value.picked, 1)[0]!;
+    const card = activePile.value.cards.splice(activePile.value.picked, 1)[0];
+    assert(card);
     if (targetPile !== null) {
       targetPile.cards.push(card);
     }
