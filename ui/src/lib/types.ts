@@ -1,8 +1,23 @@
-export interface Card {
+export interface CardData {
   id: string;
   url: string;
   title: string;
   numTiles: number;
+}
+
+export class Card {
+  id: string;
+  url: string;
+  title: string;
+  numTiles: number;
+  elem: Element | null = null;
+
+  constructor(data: CardData) {
+    this.id = data.id;
+    this.url = data.url;
+    this.title = data.title;
+    this.numTiles = data.numTiles;
+  }
 }
 
 export class Pile {

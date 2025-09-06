@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { watchEffect } from "vue";
 import type { Card } from "../lib/types.ts";
 
 interface Props {
@@ -14,15 +14,14 @@ const emit = defineEmits<{
   autoScroll: [];
 }>();
 
-const pickedCardElem = ref<Element>();
-
-watch(
-  () => props.picked,
+watchEffect(
   () => {
-    if (pickedCardElem.value == null) return;
-    // TODO use container: "nearest" to limit scrolling to the carousel
-    pickedCardElem.value.scrollIntoView({ block: "nearest" });
-    emit("autoScroll");
+    const elem = props.cards[props.picked]?.elem;
+    if (elem) {
+      // TODO use container: "nearest" to limit scrolling to the carousel
+      elem.scrollIntoView({ block: "nearest" });
+      emit("autoScroll");
+    }
   },
   { flush: "post" },
 );
@@ -39,7 +38,7 @@ watch(
       :style="{ viewTransitionName: `card-${card.id.replace('.', '_')}` }"
       @click.exact.prevent="$emit('pick', cardIndex)"
       @focus="(event) => ($attrs.onFocus as any)(event)"
-      :ref="(elem) => cardIndex === picked && (pickedCardElem = elem as Element)"
+      :ref="(elem) => (card.elem = elem as Element)"
     >
       <img :src="`/api/scrapes/${card.id}/thumb`" :alt="card.title" :title="card.title" />
     </a>

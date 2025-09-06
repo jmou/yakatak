@@ -10,7 +10,7 @@ import {
   watchEffect,
 } from "vue";
 import CardPile from "./components/CardPile.vue";
-import { Pile, type Card } from "./lib/types.ts";
+import { Card, Pile, type CardData } from "./lib/types.ts";
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -21,8 +21,8 @@ async function init() {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    const cards: Card[] = await response.json();
-    state.piles[0]!.cards = cards;
+    const cards: CardData[] = await response.json();
+    state.piles[0]!.cards = cards.map((data) => new Card(data));
   } catch (err) {
     error.value = "" + err;
     console.error("init failed:", err);
