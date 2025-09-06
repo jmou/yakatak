@@ -4,6 +4,25 @@ import DetailsPane from "./components/DetailsPane.vue";
 import PilesPane from "./components/PilesPane.vue";
 import { assert, Card, checked, Pile, type CardData } from "./lib/common.ts";
 
+// A Command describes how to run an operation defined in opsByName. It is
+// a type-checked tuple of the form [opName, ...opArgs].
+type Command = {
+  [K in keyof typeof opsByName]: [K, ...Parameters<(typeof opsByName)[K]>];
+}[keyof typeof opsByName];
+
+// The operation (or undo) log stores pairs of Commands that built up the
+// current state or can be reversed in sequence to revert to a previous state.
+interface OpLogEntry {
+  forward: Command;
+  reverse: Command;
+  location: Location;
+}
+
+interface Location {
+  pileIndex: number;
+  cardIndex: number;
+}
+
 const loading = ref(true);
 const error = ref<string | null>(null);
 
@@ -26,10 +45,15 @@ async function init() {
 const state = reactive({
   piles: [new Pile()],
   active: 0,
+  opLog: [] as OpLogEntry[],
 });
 
 const activePile = computed(() => checked(state.piles[state.active]));
 const pickedCard = computed(() => activePile.value.cards?.[activePile.value.picked]);
+const currentLocation = computed(() => ({
+  pileIndex: state.active,
+  cardIndex: activePile.value.picked,
+}));
 
 // Bounds constrain active.
 watchEffect(() => {
@@ -40,13 +64,12 @@ watchEffect(() => {
   }
 });
 
-const detailsElem = ref<HTMLElement>();
-
 function scrollToActivePile() {
   activePile.value.elem?.scrollIntoView?.({ block: "nearest" });
 }
 watchEffect(scrollToActivePile);
 
+const detailsElem = ref<HTMLElement>();
 watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
 
 function viewTransition(fn: () => void) {
@@ -60,7 +83,7 @@ function viewTransition(fn: () => void) {
   }
 }
 
-function movePickedCardToPile(pileIndex: number | null) {
+function movePickedCardToPile(pileIndex: number | null): Command | void {
   if (!pickedCard.value) return;
   const targetPile = pileIndex == null ? null : state.piles[pileIndex];
   if (targetPile === undefined) return;
@@ -73,72 +96,122 @@ function movePickedCardToPile(pileIndex: number | null) {
     }
     activePile.value.pickCardClamped(activePile.value.picked);
   });
+
+  // TODO implement undo
+  return ["irreversible"];
 }
 
-function swapPiles(aPileIndex: number, bPileIndex: number) {
+function reverseCardsInPile(pileIndex: number = state.active): Command {
+  const pile = state.piles[pileIndex];
+  assert(pile);
+  pile.cards.reverse();
+  pile.picked = pile.cards.length - 1 - pile.picked;
+  return ["reverseCardsInPile", pileIndex];
+}
+
+function createPileAt(pileIndex: number): Command {
+  state.piles.splice(pileIndex, 0, new Pile());
+  return ["removePile", pileIndex];
+}
+
+function swapPiles(aPileIndex: number, bPileIndex: number): Command | void{
   const [aPile, bPile] = [state.piles[aPileIndex], state.piles[bPileIndex]];
   if (!aPile || !bPile) return;
   [state.piles[aPileIndex], state.piles[bPileIndex]] = [bPile, aPile];
+  return ["swapPiles", aPileIndex, bPileIndex];
 }
 
-const discardPickedCard = () => movePickedCardToPile(null);
+function undo() {
+  // TODO retain entry for redo
+  const entry = state.opLog.pop();
+  if (!entry) return;
+  invokeCommand(entry.reverse);
+  state.active = entry.location.pileIndex;
+  activePile.value.picked = entry.location.cardIndex;
+}
 
-const pickCardLeft = () => activePile.value.pickCardClamped(activePile.value.picked - 1);
-const pickCardRight = () => activePile.value.pickCardClamped(activePile.value.picked + 1);
-const pickCardFirst = () => activePile.value.pickCardClamped(0);
-const pickCardLast = () => activePile.value.pickCardClamped(activePile.value.cards.length - 1);
+// Perform the operation requested by the Command.
+function invokeCommand(cmd: Command) {
+  const [opName, ...opArgs] = cmd;
+  // If type checking has an error on this line, there probably exists an
+  // operation in opsByName that does not return Command or void.
+  const opFn: (...args: any[]) => Command | void = opsByName[opName];
+  return opFn(...opArgs);
+}
 
-const activatePileUp = () => state.active--;
-const activatePileDown = () => state.active++;
+// Operations are actions on state, typically by the user. They return a
+// reciprocable undo Command that restores any nontrivial state; if all
+// modified state is trivial (like which card is picked) it returns void.
+const opsByName = {
+  pickCardLeft: () => activePile.value.pickCardClamped(activePile.value.picked - 1),
+  pickCardRight: () => activePile.value.pickCardClamped(activePile.value.picked + 1),
+  pickCardFirst: () => activePile.value.pickCardClamped(0),
+  pickCardLast: () => activePile.value.pickCardClamped(activePile.value.cards.length - 1),
 
-const createPileUp = () => state.piles.splice(state.active, 0, new Pile());
-const createPileDown = () => state.piles.splice(++state.active, 0, new Pile());
+  movePickedCardToPile,
+  discardPickedCard: () => movePickedCardToPile(null),
 
-const swapActivePileUp = () => swapPiles(state.active, --state.active);
-const swapActivePileDown = () => swapPiles(state.active, ++state.active);
+  openPickedCardPage: () => {
+    if (pickedCard.value) open(pickedCard.value.url);
+  },
 
-const openPickedCardPage = () => {
-  if (pickedCard.value) open(pickedCard.value.url);
+  reverseCardsInPile,
+
+  activatePileUp: () => void state.active--,
+  activatePileDown: () => void state.active++,
+
+  createPileUp: () => createPileAt(state.active),
+  createPileDown: () => createPileAt(++state.active),
+  removePile: (pileIndex: number) => void state.piles.splice(pileIndex, 1),
+
+  swapPiles,
+  swapActivePileUp: () => swapPiles(state.active, --state.active),
+  swapActivePileDown: () => swapPiles(state.active, ++state.active),
+
+  undo,
+  irreversible: () => assert(false),
 };
 
-const reverseActivePile = () => {
-  activePile.value.cards.reverse();
-  activePile.value.picked = activePile.value.cards.length - 1 - activePile.value.picked;
-};
+const rootKeyBindings: Record<string, Command> = {
+  h: ["pickCardLeft"],
+  j: ["activatePileDown"],
+  k: ["activatePileUp"],
+  l: ["pickCardRight"],
 
-const rootKeyBindings: Record<string, () => void> = {
-  h: pickCardLeft,
-  j: activatePileDown,
-  k: activatePileUp,
-  l: pickCardRight,
+  K: ["swapActivePileUp"],
+  J: ["swapActivePileDown"],
 
-  K: swapActivePileUp,
-  J: swapActivePileDown,
+  "^": ["pickCardFirst"],
+  $: ["pickCardLast"],
 
-  "^": pickCardFirst,
-  $: pickCardLast,
+  "0": ["movePickedCardToPile", 0],
+  "1": ["movePickedCardToPile", 1],
+  "2": ["movePickedCardToPile", 2],
+  "3": ["movePickedCardToPile", 3],
+  "4": ["movePickedCardToPile", 4],
+  "5": ["movePickedCardToPile", 5],
+  "6": ["movePickedCardToPile", 6],
+  "7": ["movePickedCardToPile", 7],
+  "8": ["movePickedCardToPile", 8],
+  "9": ["movePickedCardToPile", 9],
 
-  "0": () => movePickedCardToPile(0),
-  "1": () => movePickedCardToPile(1),
-  "2": () => movePickedCardToPile(2),
-  "3": () => movePickedCardToPile(3),
-  "4": () => movePickedCardToPile(4),
-  "5": () => movePickedCardToPile(5),
-  "6": () => movePickedCardToPile(6),
-  "7": () => movePickedCardToPile(7),
-  "8": () => movePickedCardToPile(8),
-  "9": () => movePickedCardToPile(9),
+  Enter: ["openPickedCardPage"],
+  d: ["discardPickedCard"],
 
-  Enter: openPickedCardPage,
-  d: discardPickedCard,
+  o: ["createPileDown"],
+  O: ["createPileUp"],
+  R: ["reverseCardsInPile"],
 
-  o: createPileDown,
-  O: createPileUp,
-  R: reverseActivePile,
+  u: ["undo"],
 };
 
 function onKeydown(event: KeyboardEvent) {
-  rootKeyBindings[event.key]?.();
+  const forward = rootKeyBindings[event.key];
+  if (!forward) return;
+
+  const location = currentLocation.value;
+  const reverse = invokeCommand(forward);
+  if (reverse) state.opLog.push({ forward, reverse, location });
 }
 
 onMounted(async () => {
