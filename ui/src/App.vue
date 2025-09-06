@@ -38,14 +38,17 @@ const status = refAutoReset("", 5000);
 
 const state = reactive({
   piles: [new Pile(), new Pile()],
-  active: Pile.START,
+  activePileIndex: Pile.START,
   opLog: [] as OpLogEntry[],
   opLogIndex: 0,
 });
 
-const activePile = computed(() => checked(state.piles[state.active]));
-const pickedCard = computed(() => activePile.value.cards[activePile.value.picked]);
-const currentLocation = computed<Location>(() => [state.active, activePile.value.picked]);
+const activePile = computed(() => checked(state.piles[state.activePileIndex]));
+const pickedCard = computed(() => activePile.value.cards[activePile.value.pickedCardIndex]);
+const currentLocation = computed<Location>(() => [
+  state.activePileIndex,
+  activePile.value.pickedCardIndex,
+]);
 
 whenever(
   () => getDeck.isFinished && !getDeck.error,
@@ -58,10 +61,10 @@ whenever(
 
 // Bounds constrain active.
 watchEffect(() => {
-  if (state.active < Pile.START) {
-    state.active = Pile.START;
-  } else if (state.active >= state.piles.length) {
-    state.active = state.piles.length - 1;
+  if (state.activePileIndex < Pile.START) {
+    state.activePileIndex = Pile.START;
+  } else if (state.activePileIndex >= state.piles.length) {
+    state.activePileIndex = state.piles.length - 1;
   }
 });
 
@@ -101,14 +104,14 @@ async function placeCardInto(
   await viewTransition(() => {
     const card = sourcePile.cards.splice(sourceCardIndex, 1)[0];
     assert(card);
-    sourcePile.pickCardClamped(sourcePile.picked);
+    sourcePile.pickCardClamped(sourcePile.pickedCardIndex);
     targetPile.cards.splice(targetCardIndex, 0, card);
 
     // followTarget exists for cosmetic reasons. When swapping cards within
     // a pile, the selection follows the picked card to its target location.
     // While our caller could arrange for this update, it would happen after
     // the view transition. To avoid artifacts, we push it down here.
-    if (followTarget) [state.active, activePile.value.picked] = target;
+    if (followTarget) [state.activePileIndex, activePile.value.pickedCardIndex] = target;
   });
 
   return ["placeCardInto", source, { source: target, followTarget }];
@@ -127,11 +130,11 @@ async function swapPickedCardWithNeighbor(direction: "left" | "right"): Promise<
   return placeCardInto(target, { source, followTarget: true });
 }
 
-function reverseCardsInPile(pileIndex: number = state.active): Command {
+function reverseCardsInPile(pileIndex: number = state.activePileIndex): Command {
   const pile = state.piles[pileIndex];
   assert(pile);
   pile.cards.reverse();
-  pile.picked = pile.cards.length - 1 - pile.picked;
+  pile.pickedCardIndex = pile.cards.length - 1 - pile.pickedCardIndex;
   return ["reverseCardsInPile", pileIndex];
 }
 
@@ -152,7 +155,7 @@ async function goToChosenPile(): Promise<void> {
   const options = state.piles.slice(1).map((pile, i) => `${i + 1}. ${pile.name ?? "(unnamed)"}`);
   const position = await chooser.value!.ask("Piles", options);
   if (position == null) return;
-  state.active = position + 1;
+  state.activePileIndex = position + 1;
 }
 
 function swapPiles(aPileIndex: number, bPileIndex: number): Command | void {
@@ -185,7 +188,7 @@ function deserializeState(target: Record<string, unknown>, snapshot: Record<stri
     const value = snapshot[key];
     // TODO remove special handling of Pile objects
     if (key === "piles" && Array.isArray(value)) {
-      type PileData = { name: string; cards: Card[]; picked: number };
+      type PileData = { name: string; cards: Card[]; pickedCardIndex: number };
       target[key] = value.map((data: PileData) => new Pile(data));
     } else if (value === null || typeof value !== "object" || Array.isArray(value)) {
       target[key] = value;
@@ -236,7 +239,7 @@ async function applyOpLogReverse() {
   if (!entry) return;
 
   await invokeCommand(entry.reverse);
-  [state.active, activePile.value.picked] = entry.location;
+  [state.activePileIndex, activePile.value.pickedCardIndex] = entry.location;
   state.opLogIndex--;
 }
 
@@ -244,7 +247,7 @@ async function applyOpLogForward() {
   const entry = state.opLog[state.opLogIndex];
   if (!entry) return;
 
-  [state.active, activePile.value.picked] = entry.location;
+  [state.activePileIndex, activePile.value.pickedCardIndex] = entry.location;
   await invokeCommand(entry.forward);
   state.opLogIndex++;
 }
@@ -266,8 +269,8 @@ async function invokeCommand(cmd: Command) {
 // reciprocable undo Command that restores any nontrivial state; if all
 // modified state is trivial (like which card is picked) it returns void.
 const opsByName = {
-  pickCardLeft: () => activePile.value.pickCardClamped(activePile.value.picked - 1),
-  pickCardRight: () => activePile.value.pickCardClamped(activePile.value.picked + 1),
+  pickCardLeft: () => activePile.value.pickCardClamped(activePile.value.pickedCardIndex - 1),
+  pickCardRight: () => activePile.value.pickCardClamped(activePile.value.pickedCardIndex + 1),
   pickCardFirst: () => activePile.value.pickCardClamped(0),
   pickCardLast: () => activePile.value.pickCardClamped(activePile.value.cards.length - 1),
 
@@ -282,19 +285,19 @@ const opsByName = {
 
   reverseCardsInPile,
 
-  activatePileUp: () => void state.active--,
-  activatePileDown: () => void state.active++,
+  activatePileUp: () => void state.activePileIndex--,
+  activatePileDown: () => void state.activePileIndex++,
 
-  createPileUp: () => createPileAt(state.active),
-  createPileDown: () => createPileAt(++state.active),
+  createPileUp: () => createPileAt(state.activePileIndex),
+  createPileDown: () => createPileAt(++state.activePileIndex),
   removePileUnchecked: (pileIndex: number) => void state.piles.splice(pileIndex, 1),
 
   nameActivePile,
   goToChosenPile,
 
   swapPiles,
-  swapActivePileUp: () => swapPiles(state.active, --state.active),
-  swapActivePileDown: () => swapPiles(state.active, ++state.active),
+  swapActivePileUp: () => swapPiles(state.activePileIndex, --state.activePileIndex),
+  swapActivePileDown: () => swapPiles(state.activePileIndex, ++state.activePileIndex),
 
   takeSnapshot,
   restoreSnapshot,
@@ -387,7 +390,7 @@ function onKeydown(event: KeyboardEvent) {
       @keydown="onKeydown"
     />
     <PilesPane
-      v-model:active="state.active"
+      v-model:active="state.activePileIndex"
       :piles="state.piles"
       tabindex="-1"
       @auto-scroll="scrollToActivePile"

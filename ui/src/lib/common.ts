@@ -36,21 +36,21 @@ export class Card {
 export class Pile {
   name = "";
   cards: Card[] = [];
-  picked = 0;
+  pickedCardIndex = 0;
   elem: Element | null = null;
 
   static readonly DISCARD = 0;
   static readonly START = 1;
 
-  constructor(data?: { name: string; cards: Card[]; picked: number }) {
+  constructor(data?: { name: string; cards: Card[]; pickedCardIndex: number }) {
     if (data) {
       this.name = data.name;
       this.cards = data.cards;
-      this.picked = data.picked;
+      this.pickedCardIndex = data.pickedCardIndex;
     }
   }
 
   pickCardClamped(cardIndex: number) {
-    this.picked = Math.max(0, Math.min(cardIndex, this.cards.length - 1));
+    this.pickedCardIndex = Math.max(0, Math.min(cardIndex, this.cards.length - 1));
   }
 }

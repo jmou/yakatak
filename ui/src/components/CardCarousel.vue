@@ -3,9 +3,9 @@ import { useElementSize, whenever } from "@vueuse/core";
 import { useTemplateRef, watch } from "vue";
 import type { Card } from "../lib/common.ts";
 
-const { cards, picked } = defineProps<{
+const { cards, pickedCardIndex } = defineProps<{
   cards: Card[];
-  picked: number;
+  pickedCardIndex: number;
 }>();
 
 const emit = defineEmits<{
@@ -18,7 +18,7 @@ const carouselElem = useTemplateRef("carouselElem");
 const { width } = useElementSize(carouselElem);
 
 whenever(
-  () => cards[picked]?.elem,
+  () => cards[pickedCardIndex]?.elem,
   (elem) => {
     // Typically scrollIntoView() affects all containing overflows. This
     // throws off vertical scrolling in the piles pane, so we resync on the
@@ -39,7 +39,7 @@ whenever(
 watch(width, (newWidth, prevWidth) => {
   // TODO we shouldn't scroll if the card was outside the scrollport
   if (newWidth < prevWidth) {
-    cards[picked]?.elem?.scrollIntoView({ block: "nearest", behavior: "instant" });
+    cards[pickedCardIndex]?.elem?.scrollIntoView({ block: "nearest", behavior: "instant" });
   }
 });
 </script>
@@ -51,7 +51,7 @@ watch(width, (newWidth, prevWidth) => {
       :key="card.id"
       :href="card.url"
       class="card"
-      :class="{ picked: cardIndex === picked }"
+      :class="{ picked: cardIndex === pickedCardIndex }"
       :style="{ viewTransitionName: `card-${card.id.replace('.', '_')}` }"
       @click.exact.prevent="$emit('pick', cardIndex)"
       v-on="{ focus: $attrs.onFocus }"
