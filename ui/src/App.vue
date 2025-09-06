@@ -24,13 +24,21 @@ async function init() {
 }
 
 const state = reactive({
-  // TODO something better than statically allocated piles
-  piles: Array.from({ length: 10 }, () => new Pile()),
+  piles: [new Pile()],
   active: 0,
 });
 
 const activePile = computed(() => state.piles[state.active]!);
 const pickedCard = computed(() => activePile.value.cards?.[activePile.value.picked]);
+
+// Bounds constrain active.
+watchEffect(() => {
+  if (state.active < 0) {
+    state.active = 0;
+  } else if (state.active >= state.piles.length) {
+    state.active = state.piles.length - 1;
+  }
+});
 
 const detailsElem = ref<HTMLElement>();
 
@@ -66,6 +74,12 @@ function movePickedCardToPile(pileIndex: number | null) {
   });
 }
 
+function swapPiles(aPileIndex: number, bPileIndex: number) {
+  const [aPile, bPile] = [state.piles[aPileIndex], state.piles[bPileIndex]];
+  if (!aPile || !bPile) return;
+  [state.piles[aPileIndex], state.piles[bPileIndex]] = [bPile, aPile];
+}
+
 const discardPickedCard = () => movePickedCardToPile(null);
 
 const pickCardLeft = () => activePile.value.pickCardClamped(activePile.value.picked - 1);
@@ -73,8 +87,14 @@ const pickCardRight = () => activePile.value.pickCardClamped(activePile.value.pi
 const pickCardFirst = () => activePile.value.pickCardClamped(0);
 const pickCardLast = () => activePile.value.pickCardClamped(activePile.value.cards.length - 1);
 
-const activatePileUp = () => (state.active = Math.max(state.active - 1, 0));
-const activatePileDown = () => (state.active = Math.min(state.active + 1, state.piles.length - 1));
+const activatePileUp = () => state.active--;
+const activatePileDown = () => state.active++;
+
+const createPileUp = () => state.piles.splice(state.active, 0, new Pile());
+const createPileDown = () => state.piles.splice(++state.active, 0, new Pile());
+
+const swapActivePileUp = () => swapPiles(state.active, --state.active);
+const swapActivePileDown = () => swapPiles(state.active, ++state.active);
 
 const openPickedCardPage = () => {
   if (pickedCard.value) open(pickedCard.value.url);
@@ -91,6 +111,9 @@ const rootKeyBindings: Record<string, () => void> = {
   k: activatePileUp,
   l: pickCardRight,
 
+  K: swapActivePileUp,
+  J: swapActivePileDown,
+
   "^": pickCardFirst,
   $: pickCardLast,
 
@@ -105,9 +128,11 @@ const rootKeyBindings: Record<string, () => void> = {
   "8": () => movePickedCardToPile(8),
   "9": () => movePickedCardToPile(9),
 
-  o: openPickedCardPage,
+  Enter: openPickedCardPage,
   d: discardPickedCard,
 
+  o: createPileDown,
+  O: createPileUp,
   R: reverseActivePile,
 };
 
