@@ -1,15 +1,7 @@
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onMounted,
-  reactive,
-  ref,
-  useTemplateRef,
-  watch,
-  watchEffect,
-} from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch, watchEffect } from "vue";
 import CardPile from "./components/CardPile.vue";
+import DetailsPane from "./components/DetailsPane.vue";
 import { Card, Pile, type CardData } from "./lib/types.ts";
 
 const loading = ref(true);
@@ -38,10 +30,10 @@ const state = reactive({
 });
 
 const activePile = computed(() => state.piles[state.active]!);
-const pickedCard = computed(() => activePile.value.cards?.[activePile.value.picked]);
+const activePickedCard = computed(() => activePile.value.cards?.[activePile.value.picked]);
 
 function moveCardToPile(pileIndex: number | null) {
-  if (!pickedCard.value) return;
+  if (!activePickedCard.value) return;
   const targetPile = pileIndex == null ? null : state.piles[pileIndex];
   if (targetPile === undefined) return;
 
@@ -58,14 +50,14 @@ function discardCard() {
   moveCardToPile(null);
 }
 
-const detailsElem = useTemplateRef("detailsElem");
+const detailsElem = ref<HTMLElement>();
 
 function scrollToActivePile() {
   activePile.value.elem?.scrollIntoView({ block: "nearest" });
 }
 watchEffect(scrollToActivePile);
 
-watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
+watch(activePickedCard, () => (detailsElem.value!.scrollTop = 0));
 
 function viewTransition(fn: () => void) {
   if (!document.startViewTransition) {
@@ -92,7 +84,7 @@ function onKeydown(event: KeyboardEvent) {
   } else if (event.key === "k") {
     state.active = Math.max(state.active - 1, 0);
   } else if (event.key === "o") {
-    if (pickedCard.value) open(pickedCard.value.url);
+    if (activePickedCard.value) open(activePickedCard.value.url);
   } else if (event.key === "d") {
     discardCard();
   } else if (event.key >= "0" && event.key <= "9") {
@@ -111,22 +103,14 @@ onMounted(async () => {
 
 <template>
   <main>
-    <div ref="detailsElem" class="details" tabindex="0" @keydown="onKeydown">
-      <div class="spacer"></div>
-      <div v-if="loading" class="loading">Loading deck...</div>
-      <div v-else-if="error" class="error">{{ error }}</div>
-      <template v-else-if="pickedCard">
-        <div class="meta">{{ pickedCard.title }}<br />{{ pickedCard.url }}</div>
-        <img
-          v-for="tileIndex in Array.from({ length: pickedCard.numTiles }, (_, i) => i)"
-          :key="tileIndex"
-          :src="`/api/scrapes/${pickedCard.id}/tiles/${tileIndex}`"
-          width="1024"
-          :height="tileIndex < pickedCard.numTiles - 1 ? 1024 : undefined"
-          loading="lazy"
-        />
-      </template>
-    </div>
+    <DetailsPane
+      :loading
+      :error
+      :card="activePickedCard"
+      v-model:elem="detailsElem"
+      tabindex="0"
+      @keydown="onKeydown"
+    />
     <div class="piles" tabindex="-1" @focus="detailsElem!.focus()">
       <CardPile
         v-for="(pile, pileIndex) in state.piles"
@@ -148,40 +132,6 @@ main {
   height: 100vh;
 }
 
-.details {
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid #ccc;
-  overflow: auto;
-  scrollbar-gutter: stable;
-  scrollbar-color: #666 #eee;
-  view-transition-name: details;
-
-  /* We programatically focus the details pane, but don't emphasize it. */
-  &:focus-visible {
-    outline: none;
-  }
-
-  /* Keep the content from collapsing when no card is selected; we can't easily
-     set the pane width directly without knowing the scrollbar width. */
-  > .spacer {
-    width: 1024px;
-    height: 0;
-  }
-
-  > .meta {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    padding: 2px;
-    border-top-right-radius: 8px;
-    background: #eee;
-    &:hover {
-      opacity: 0.3;
-    }
-  }
-}
-
 .piles {
   flex: 1;
   min-width: 300px;
@@ -195,24 +145,6 @@ main {
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-
-.loading,
-.error {
-  padding: 40px;
-  text-align: center;
-  font-size: 18px;
-}
-
-.loading {
-  color: #666;
-}
-
-.error {
-  color: #dc3545;
-  background: #f8d7da;
-  border: 1px solid #f5c6cb;
-  border-radius: 4px;
 }
 </style>
 
