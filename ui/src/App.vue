@@ -67,21 +67,21 @@ watchEffect(scrollToActivePile);
 const detailsElem = ref<HTMLElement>();
 watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
 
-function viewTransition(fn: () => void) {
+async function viewTransition(fn: () => void): Promise<void> {
   if (!document.startViewTransition) {
     fn();
   } else {
-    document.startViewTransition(() => {
+    return document.startViewTransition(() => {
       fn();
       return nextTick();
-    });
+    }).updateCallbackDone;
   }
 }
 
-function placeCardInto(
+async function placeCardInto(
   target: Location,
   options: { source?: Location; followTarget?: boolean } = {},
-): Command | void {
+): Promise<Command | void> {
   const { source = currentLocation.value, followTarget = false } = options;
 
   const [sourcePile, targetPile] = [source, target].map((loc) => state.piles[loc[0]]);
@@ -90,7 +90,7 @@ function placeCardInto(
   if (!sourcePile.cards[sourceCardIndex]) return;
   if (targetCardIndex < 0 || targetCardIndex > targetPile.cards.length) return;
 
-  viewTransition(() => {
+  await viewTransition(() => {
     const card = sourcePile.cards.splice(sourceCardIndex, 1)[0];
     assert(card);
     sourcePile.pickCardClamped(sourcePile.picked);
@@ -106,13 +106,13 @@ function placeCardInto(
   return ["placeCardInto", source, { source: target, followTarget }];
 }
 
-function movePickedCardToPile(pileIndex: number): Command | void {
+async function movePickedCardToPile(pileIndex: number): Promise<Command | void> {
   const pile = state.piles[pileIndex];
   if (!pile) return;
   return placeCardInto([pileIndex, pile.cards.length]);
 }
 
-function swapPickedCardWithNeighbor(direction: "left" | "right"): Command | void {
+async function swapPickedCardWithNeighbor(direction: "left" | "right"): Promise<Command | void> {
   const source = currentLocation.value;
   const offset = direction == "left" ? -1 : 1;
   const target: Location = [source[0], source[1] + offset];
@@ -139,32 +139,35 @@ function swapPiles(aPileIndex: number, bPileIndex: number): Command | void {
   return ["swapPiles", aPileIndex, bPileIndex];
 }
 
-function applyOpLogReverse() {
+async function applyOpLogReverse() {
   const entry = state.opLog[state.opLogIndex - 1];
   if (!entry) return;
 
-  invokeCommand(entry.reverse);
-  // TODO restoring location can happen too early if our operation is async, like view transitions
-  // [state.active, activePile.value.picked] = entry.location;
+  await invokeCommand(entry.reverse);
+  [state.active, activePile.value.picked] = entry.location;
   state.opLogIndex--;
 }
 
-function applyOpLogForward() {
+async function applyOpLogForward() {
   const entry = state.opLog[state.opLogIndex];
   if (!entry) return;
 
   [state.active, activePile.value.picked] = entry.location;
-  invokeCommand(entry.forward);
+  await invokeCommand(entry.forward);
   state.opLogIndex++;
 }
 
 // Perform the operation requested by the Command.
-function invokeCommand(cmd: Command) {
+async function invokeCommand(cmd: Command) {
   const [opName, ...opArgs] = cmd;
+  // This partially elided type exists only to check that all operations return
+  // Command (or void). We still use the discriminated type elsewhere.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type FunctionReturnsCommand = (...args: any[]) => Command | void | Promise<Command | void>;
   // If type checking has an error on this line, there probably exists an
   // operation in opsByName that does not return Command or void.
-  const opFn: (...args: any[]) => Command | void = opsByName[opName];
-  return opFn(...opArgs);
+  const opFn: FunctionReturnsCommand = opsByName[opName];
+  return Promise.resolve(opFn(...opArgs));
 }
 
 // Operations are actions on state, typically by the user. They return a
@@ -238,16 +241,34 @@ const rootKeyBindings: Record<string, Command> = {
   U: ["applyOpLogForward"],
 };
 
-function onKeydown(event: KeyboardEvent) {
+async function handleKeyEvent(event: KeyboardEvent) {
   const forward = rootKeyBindings[event.key];
   if (!forward) return;
 
   const location = currentLocation.value;
-  const reverse = invokeCommand(forward);
+  const reverse = await invokeCommand(forward);
   if (reverse) {
     state.opLog.splice(state.opLogIndex);
     state.opLog[state.opLogIndex++] = { forward, reverse, location };
   }
+}
+
+// FIFO to serialize event handling.
+const events: KeyboardEvent[] = [];
+let eventsPromise: Promise<void> | null = null;
+
+async function startEventProcessing() {
+  while (true) {
+    const event = events.shift()
+    if (!event) break;
+    await handleKeyEvent(event);
+  }
+  eventsPromise = null;
+}
+
+function onKeydown(event: KeyboardEvent) {
+  events.push(event);
+  if (!eventsPromise) eventsPromise = startEventProcessing();
 }
 
 onMounted(async () => {
