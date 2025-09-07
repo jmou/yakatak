@@ -13,22 +13,23 @@ const active = defineModel("active");
 
 <template>
   <div class="piles">
-    <section
-      v-for="(pile, pileIndex) in piles"
-      :key="pileIndex"
-      :class="{ selected: pileIndex === active }"
-      @click="active = pileIndex"
-      :ref="(elem) => (pile.elem = elem as Element)"
-    >
-      <header>{{ pileIndex }}</header>
-      <CardCarousel
-        :cards="pile.cards"
-        :picked="pile.picked"
-        class="carousel"
-        @pick="(cardIndex) => pile.pickCardClamped(cardIndex)"
-        v-on="{ autoScroll: $attrs.onAutoScroll, focus: $attrs.onFocus }"
-      />
-    </section>
+    <template v-for="(pile, pileIndex) in piles" :key="pileIndex">
+      <section
+        v-if="pileIndex != 0"
+        :class="{ selected: pileIndex === active }"
+        @click="active = pileIndex"
+        :ref="(elem) => (pile.elem = elem as Element)"
+      >
+        <header>{{ pileIndex }}</header>
+        <CardCarousel
+          :cards="pile.cards"
+          :picked="pile.picked"
+          class="carousel"
+          @pick="(cardIndex) => pile.pickCardClamped(cardIndex)"
+          v-on="{ autoScroll: $attrs.onAutoScroll, focus: $attrs.onFocus }"
+        />
+      </section>
+    </template>
   </div>
 </template>
 

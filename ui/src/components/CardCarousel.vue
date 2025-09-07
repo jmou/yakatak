@@ -172,8 +172,12 @@ watchEffect(
   }
 }
 
-::view-transition-old(.card):only-child {
+::view-transition-old(.card):only-child,
+::view-transition-new(.card):only-child {
   animation-name: slide-up;
+}
+::view-transition-new(.card):only-child {
+  animation-direction: reverse;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -18,10 +18,7 @@ interface OpLogEntry {
   location: Location;
 }
 
-interface Location {
-  pileIndex: number;
-  cardIndex: number;
-}
+type Location = [pileIndex: number, cardIndex: number];
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -33,7 +30,7 @@ async function init() {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const cards: CardData[] = await response.json();
-    state.piles[0]!.cards = cards.map((data) => new Card(data));
+    state.piles[1]!.cards = cards.map((data) => new Card(data));
   } catch (err) {
     error.value = "" + err;
     console.error("init failed:", err);
@@ -43,23 +40,20 @@ async function init() {
 }
 
 const state = reactive({
-  piles: [new Pile()],
-  active: 0,
+  piles: [new Pile(), new Pile()],
+  active: 1,
   opLog: [] as OpLogEntry[],
   opLogIndex: 0,
 });
 
 const activePile = computed(() => checked(state.piles[state.active]));
-const pickedCard = computed(() => activePile.value.cards?.[activePile.value.picked]);
-const currentLocation = computed(() => ({
-  pileIndex: state.active,
-  cardIndex: activePile.value.picked,
-}));
+const pickedCard = computed(() => activePile.value.cards[activePile.value.picked]);
+const currentLocation = computed<Location>(() => [state.active, activePile.value.picked]);
 
 // Bounds constrain active.
 watchEffect(() => {
-  if (state.active < 0) {
-    state.active = 0;
+  if (state.active < 1) {
+    state.active = 1;
   } else if (state.active >= state.piles.length) {
     state.active = state.piles.length - 1;
   }
@@ -84,22 +78,45 @@ function viewTransition(fn: () => void) {
   }
 }
 
-function movePickedCardToPile(pileIndex: number | null): Command | void {
-  if (!pickedCard.value) return;
-  const targetPile = pileIndex == null ? null : state.piles[pileIndex];
-  if (targetPile === undefined) return;
+function placeCardInto(
+  target: Location,
+  options: { source?: Location; followTarget?: boolean } = {},
+): Command | void {
+  const { source = currentLocation.value, followTarget = false } = options;
+
+  const [sourcePile, targetPile] = [source, target].map((loc) => state.piles[loc[0]]);
+  const [sourceCardIndex, targetCardIndex] = [source[1], target[1]];
+  if (!sourcePile || !targetPile) return;
+  if (!sourcePile.cards[sourceCardIndex]) return;
+  if (targetCardIndex < 0 || targetCardIndex > targetPile.cards.length) return;
 
   viewTransition(() => {
-    const card = activePile.value.cards.splice(activePile.value.picked, 1)[0];
+    const card = sourcePile.cards.splice(sourceCardIndex, 1)[0];
     assert(card);
-    if (targetPile !== null) {
-      targetPile.cards.push(card);
-    }
-    activePile.value.pickCardClamped(activePile.value.picked);
+    sourcePile.pickCardClamped(sourcePile.picked);
+    targetPile.cards.splice(targetCardIndex, 0, card);
+
+    // followTarget exists for cosmetic reasons. When swapping cards within
+    // a pile, the selection follows the picked card to its target location.
+    // While our caller could arrange for this update, it would happen after
+    // the view transition. To avoid artifacts, we push it down here.
+    if (followTarget) [state.active, activePile.value.picked] = target;
   });
 
-  // TODO implement undo
-  return ["irreversible"];
+  return ["placeCardInto", source, { source: target, followTarget }];
+}
+
+function movePickedCardToPile(pileIndex: number): Command | void {
+  const pile = state.piles[pileIndex];
+  if (!pile) return;
+  return placeCardInto([pileIndex, pile.cards.length]);
+}
+
+function swapPickedCardWithNeighbor(direction: "left" | "right"): Command | void {
+  const source = currentLocation.value;
+  const offset = direction == "left" ? -1 : 1;
+  const target: Location = [source[0], source[1] + offset];
+  return placeCardInto(target, { source, followTarget: true });
 }
 
 function reverseCardsInPile(pileIndex: number = state.active): Command {
@@ -112,12 +129,12 @@ function reverseCardsInPile(pileIndex: number = state.active): Command {
 
 function createPileAt(pileIndex: number): Command {
   state.piles.splice(pileIndex, 0, new Pile());
-  return ["removePile", pileIndex];
+  return ["removePileUnchecked", pileIndex];
 }
 
 function swapPiles(aPileIndex: number, bPileIndex: number): Command | void {
   const [aPile, bPile] = [state.piles[aPileIndex], state.piles[bPileIndex]];
-  if (!aPile || !bPile) return;
+  if (aPileIndex < 1 || bPileIndex < 1 || !aPile || !bPile) return;
   [state.piles[aPileIndex], state.piles[bPileIndex]] = [bPile, aPile];
   return ["swapPiles", aPileIndex, bPileIndex];
 }
@@ -125,10 +142,10 @@ function swapPiles(aPileIndex: number, bPileIndex: number): Command | void {
 function applyOpLogReverse() {
   const entry = state.opLog[state.opLogIndex - 1];
   if (!entry) return;
-  
+
   invokeCommand(entry.reverse);
-  state.active = entry.location.pileIndex;
-  activePile.value.picked = entry.location.cardIndex;
+  // TODO restoring location can happen too early if our operation is async, like view transitions
+  // [state.active, activePile.value.picked] = entry.location;
   state.opLogIndex--;
 }
 
@@ -136,8 +153,7 @@ function applyOpLogForward() {
   const entry = state.opLog[state.opLogIndex];
   if (!entry) return;
 
-  state.active = entry.location.pileIndex;
-  activePile.value.picked = entry.location.cardIndex;
+  [state.active, activePile.value.picked] = entry.location;
   invokeCommand(entry.forward);
   state.opLogIndex++;
 }
@@ -160,8 +176,10 @@ const opsByName = {
   pickCardFirst: () => activePile.value.pickCardClamped(0),
   pickCardLast: () => activePile.value.pickCardClamped(activePile.value.cards.length - 1),
 
+  placeCardInto,
+  swapPickedCardWithNeighbor,
   movePickedCardToPile,
-  discardPickedCard: () => movePickedCardToPile(null),
+  discardPickedCard: () => movePickedCardToPile(0),
 
   openPickedCardPage: () => {
     if (pickedCard.value) open(pickedCard.value.url);
@@ -174,7 +192,7 @@ const opsByName = {
 
   createPileUp: () => createPileAt(state.active),
   createPileDown: () => createPileAt(++state.active),
-  removePile: (pileIndex: number) => void state.piles.splice(pileIndex, 1),
+  removePileUnchecked: (pileIndex: number) => void state.piles.splice(pileIndex, 1),
 
   swapPiles,
   swapActivePileUp: () => swapPiles(state.active, --state.active),
@@ -182,7 +200,6 @@ const opsByName = {
 
   applyOpLogReverse,
   applyOpLogForward,
-  irreversible: () => assert(false),
 };
 
 const rootKeyBindings: Record<string, Command> = {
@@ -191,13 +208,14 @@ const rootKeyBindings: Record<string, Command> = {
   k: ["activatePileUp"],
   l: ["pickCardRight"],
 
+  H: ["swapPickedCardWithNeighbor", "left"],
   K: ["swapActivePileUp"],
   J: ["swapActivePileDown"],
+  L: ["swapPickedCardWithNeighbor", "right"],
 
   "^": ["pickCardFirst"],
   $: ["pickCardLast"],
 
-  "0": ["movePickedCardToPile", 0],
   "1": ["movePickedCardToPile", 1],
   "2": ["movePickedCardToPile", 2],
   "3": ["movePickedCardToPile", 3],
@@ -207,6 +225,7 @@ const rootKeyBindings: Record<string, Command> = {
   "7": ["movePickedCardToPile", 7],
   "8": ["movePickedCardToPile", 8],
   "9": ["movePickedCardToPile", 9],
+  "0": ["movePickedCardToPile", 10],
 
   Enter: ["openPickedCardPage"],
   d: ["discardPickedCard"],
