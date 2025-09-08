@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Pile } from "../lib/common.ts";
+import { Pile } from "../lib/common.ts";
 import CardCarousel from "./CardCarousel.vue";
 
 interface Props {
@@ -15,12 +15,12 @@ const active = defineModel("active");
   <div class="piles">
     <template v-for="(pile, pileIndex) in piles" :key="pileIndex">
       <section
-        v-if="pileIndex != 0"
+        v-if="pileIndex >= Pile.START"
         :class="{ selected: pileIndex === active }"
         @click="active = pileIndex"
         :ref="(elem) => (pile.elem = elem as Element)"
       >
-        <header>{{ pileIndex }}</header>
+        <header>{{ pileIndex - Pile.START + 1 }}</header>
         <CardCarousel
           :cards="pile.cards"
           :picked="pile.picked"

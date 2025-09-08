@@ -41,7 +41,7 @@ async function init() {
 
 const state = reactive({
   piles: [new Pile(), new Pile()],
-  active: 1,
+  active: Pile.START,
   opLog: [] as OpLogEntry[],
   opLogIndex: 0,
 });
@@ -52,8 +52,8 @@ const currentLocation = computed<Location>(() => [state.active, activePile.value
 
 // Bounds constrain active.
 watchEffect(() => {
-  if (state.active < 1) {
-    state.active = 1;
+  if (state.active < Pile.START) {
+    state.active = Pile.START;
   } else if (state.active >= state.piles.length) {
     state.active = state.piles.length - 1;
   }
@@ -134,7 +134,7 @@ function createPileAt(pileIndex: number): Command {
 
 function swapPiles(aPileIndex: number, bPileIndex: number): Command | void {
   const [aPile, bPile] = [state.piles[aPileIndex], state.piles[bPileIndex]];
-  if (aPileIndex < 1 || bPileIndex < 1 || !aPile || !bPile) return;
+  if (aPileIndex < Pile.START || bPileIndex < Pile.START || !aPile || !bPile) return;
   [state.piles[aPileIndex], state.piles[bPileIndex]] = [bPile, aPile];
   return ["swapPiles", aPileIndex, bPileIndex];
 }
@@ -182,7 +182,7 @@ const opsByName = {
   placeCardInto,
   swapPickedCardWithNeighbor,
   movePickedCardToPile,
-  discardPickedCard: () => movePickedCardToPile(0),
+  discardPickedCard: () => movePickedCardToPile(Pile.DISCARD),
 
   openPickedCardPage: () => {
     if (pickedCard.value) open(pickedCard.value.url);

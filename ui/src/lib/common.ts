@@ -38,6 +38,9 @@ export class Pile {
   picked = 0;
   elem: Element | null = null;
 
+  static readonly DISCARD = 0;
+  static readonly START = 1;
+
   pickCardClamped(cardIndex: number) {
     this.picked = Math.max(0, Math.min(cardIndex, this.cards.length - 1));
   }
