@@ -18,7 +18,7 @@ interface OpLogEntry {
   location: Location;
 }
 
-type Location = [pileIndex: number, cardIndex: number];
+type Location = readonly [pileIndex: number, cardIndex: number];
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -205,7 +205,7 @@ const opsByName = {
   applyOpLogForward,
 };
 
-const rootKeyBindings: Record<string, Command> = {
+const rootKeyBindings: Readonly<Record<string, Command>> = {
   h: ["pickCardLeft"],
   j: ["activatePileDown"],
   k: ["activatePileUp"],

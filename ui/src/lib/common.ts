@@ -12,17 +12,17 @@ export function checked<T>(value: T): NonNullable<T> {
 }
 
 export interface CardData {
-  id: string;
-  url: string;
-  title: string;
-  numTiles: number;
+  readonly id: string;
+  readonly url: string;
+  readonly title: string;
+  readonly numTiles: number;
 }
 
 export class Card {
-  id: string;
-  url: string;
-  title: string;
-  numTiles: number;
+  readonly id: string;
+  readonly url: string;
+  readonly title: string;
+  readonly numTiles: number;
   elem: Element | null = null;
 
   constructor(data: CardData) {
