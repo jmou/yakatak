@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch, watchEffect } from "vue";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  reactive,
+  ref,
+  useTemplateRef,
+  watch,
+  watchEffect,
+} from "vue";
+import ChooserDialog from "./components/ChooserDialog.vue";
 import DetailsPane from "./components/DetailsPane.vue";
 import PilesPane from "./components/PilesPane.vue";
 import { assert, Card, checked, Pile, type CardData } from "./lib/common.ts";
@@ -64,7 +74,9 @@ function scrollToActivePile() {
 }
 watchEffect(scrollToActivePile);
 
+const chooser = useTemplateRef("chooser");
 const detailsElem = ref<HTMLElement>();
+
 watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
 
 async function viewTransition(fn: () => void): Promise<void> {
@@ -132,6 +144,21 @@ function createPileAt(pileIndex: number): Command {
   return ["removePileUnchecked", pileIndex];
 }
 
+function nameActivePile(name?: string | null): Command | void {
+  if (!name) name = prompt("Pile name", activePile.value.name);
+  if (!name) return;
+  const oldName = activePile.value.name;
+  activePile.value.name = name;
+  return ["nameActivePile", oldName];
+}
+
+async function goToChosenPile(): Promise<void> {
+  const options = state.piles.slice(1).map((pile, i) => `${i + 1}. ${pile.name ?? "(unnamed)"}`);
+  const position = await chooser.value!.ask("Piles", options);
+  if (position == null) return;
+  state.active = position + 1;
+}
+
 function swapPiles(aPileIndex: number, bPileIndex: number): Command | void {
   const [aPile, bPile] = [state.piles[aPileIndex], state.piles[bPileIndex]];
   if (aPileIndex < Pile.START || bPileIndex < Pile.START || !aPile || !bPile) return;
@@ -197,6 +224,9 @@ const opsByName = {
   createPileDown: () => createPileAt(++state.active),
   removePileUnchecked: (pileIndex: number) => void state.piles.splice(pileIndex, 1),
 
+  nameActivePile,
+  goToChosenPile,
+
   swapPiles,
   swapActivePileUp: () => swapPiles(state.active, --state.active),
   swapActivePileDown: () => swapPiles(state.active, ++state.active),
@@ -235,6 +265,8 @@ const rootKeyBindings: Readonly<Record<string, Command>> = {
 
   o: ["createPileDown"],
   O: ["createPileUp"],
+  n: ["nameActivePile"],
+  g: ["goToChosenPile"],
   R: ["reverseCardsInPile"],
 
   u: ["applyOpLogReverse"],
@@ -259,7 +291,7 @@ let eventsPromise: Promise<void> | null = null;
 
 async function startEventProcessing() {
   while (true) {
-    const event = events.shift()
+    const event = events.shift();
     if (!event) break;
     await handleKeyEvent(event);
   }
@@ -294,6 +326,7 @@ onMounted(async () => {
       @auto-scroll="scrollToActivePile"
       @focus="detailsElem!.focus()"
     />
+    <ChooserDialog ref="chooser" />
   </main>
 </template>
 

@@ -20,7 +20,9 @@ const active = defineModel("active");
         @click="active = pileIndex"
         :ref="(elem) => (pile.elem = elem as Element)"
       >
-        <header>{{ pileIndex - Pile.START + 1 }}</header>
+        <header>
+          <span class="index">{{ pileIndex - Pile.START + 1 }}</span> {{ pile.name }}
+        </header>
         <CardCarousel
           :cards="pile.cards"
           :picked="pile.picked"
@@ -68,8 +70,11 @@ section {
     outline: 3px solid #acf;
   }
 
-  > header {
+  > header > .index {
     font-weight: bold;
+    &::after {
+      content: ".";
+    }
   }
 
   > .carousel {

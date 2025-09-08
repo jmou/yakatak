@@ -34,6 +34,7 @@ export class Card {
 }
 
 export class Pile {
+  name = "";
   cards: Card[] = [];
   picked = 0;
   elem: Element | null = null;
