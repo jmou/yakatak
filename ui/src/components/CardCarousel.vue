@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import { watchEffect } from "vue";
+import { useElementSize } from "@vueuse/core";
+import { useTemplateRef, watch, watchEffect } from "vue";
 import type { Card } from "../lib/common.ts";
 
-interface Props {
+const { cards, picked } = defineProps<{
   cards: Card[];
   picked: number;
-}
-
-const props = defineProps<Props>();
+}>();
 
 const emit = defineEmits<{
   pick: [cardIndex: number];
   autoScroll: [];
 }>();
 
+const carouselElem = useTemplateRef("carouselElem");
+
+const { width } = useElementSize(carouselElem);
+
 watchEffect(
   () => {
-    const elem = props.cards[props.picked]?.elem;
+    const elem = cards[picked]?.elem;
     if (elem) {
       // Typically scrollIntoView() affects all containing overflows. This
       // throws off vertical scrolling in the piles pane, so we resync on the
@@ -32,10 +35,19 @@ watchEffect(
   },
   { flush: "post" },
 );
+
+// Keep the picked card in view if we are resized smaller. Unlike the
+// scrolling to a newly picked card above, this is not a direct user action.
+watch(width, (_, prevWidth) => {
+  // TODO we shouldn't scroll if the card was outside the scrollport
+  if (width.value < prevWidth) {
+    cards[picked]?.elem?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }
+});
 </script>
 
 <template>
-  <div class="carousel">
+  <div class="carousel" ref="carouselElem">
     <a
       v-for="(card, cardIndex) in cards"
       :key="card.id"
