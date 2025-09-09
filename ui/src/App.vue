@@ -1,14 +1,6 @@
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onMounted,
-  reactive,
-  ref,
-  useTemplateRef,
-  watch,
-  watchEffect,
-} from "vue";
+import { useFetch, whenever } from "@vueuse/core";
+import { computed, nextTick, reactive, ref, useTemplateRef, watch, watchEffect } from "vue";
 import ChooserDialog from "./components/ChooserDialog.vue";
 import DetailsPane from "./components/DetailsPane.vue";
 import PilesPane from "./components/PilesPane.vue";
@@ -30,24 +22,7 @@ interface OpLogEntry {
 
 type Location = readonly [pileIndex: number, cardIndex: number];
 
-const loading = ref(true);
-const error = ref<string | null>(null);
-
-async function init() {
-  try {
-    const response = await fetch("/api/deck");
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const cards: CardData[] = await response.json();
-    state.piles[1]!.cards = cards.map((data) => new Card(data));
-  } catch (err) {
-    error.value = "" + err;
-    console.error("init failed:", err);
-  } finally {
-    loading.value = false;
-  }
-}
+const getDeck = reactive(useFetch("/api/deck").json<CardData[]>());
 
 const state = reactive({
   piles: [new Pile(), new Pile()],
@@ -59,6 +34,15 @@ const state = reactive({
 const activePile = computed(() => checked(state.piles[state.active]));
 const pickedCard = computed(() => activePile.value.cards[activePile.value.picked]);
 const currentLocation = computed<Location>(() => [state.active, activePile.value.picked]);
+
+whenever(
+  () => getDeck.isFinished && !getDeck.error,
+  () => {
+    // TODO validate data
+    assert(getDeck.data);
+    state.piles[1]!.cards = getDeck.data.map((data) => new Card(data));
+  },
+);
 
 // Bounds constrain active.
 watchEffect(() => {
@@ -302,21 +286,17 @@ function onKeydown(event: KeyboardEvent) {
   events.push(event);
   if (!eventsPromise) eventsPromise = startEventProcessing();
 }
-
-onMounted(async () => {
-  await init();
-  detailsElem.value!.focus();
-});
 </script>
 
 <template>
   <main>
     <DetailsPane
-      :loading
-      :error
+      :loading="getDeck.isFetching"
+      :error="getDeck.error"
       :card="pickedCard"
       v-model:elem="detailsElem"
       tabindex="0"
+      autofocus
       @keydown="onKeydown"
     />
     <PilesPane
