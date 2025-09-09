@@ -36,6 +36,13 @@ onMounted(() => {
   });
 });
 
+function onClickLabel(event: PointerEvent) {
+  // Are we actually a keyboard "click"?
+  // See https://stackoverflow.com/a/35034284/13773246
+  if (event.clientX === 0 && event.clientY === 0) return;
+  elem.value!.close();
+}
+
 /**
  * Present to the user a dialog for choosing among the provided labels.
  * @param title Dialog title
@@ -73,7 +80,7 @@ defineExpose({ ask });
   <dialog ref="elem" closedby="any">
     <header>{{ state.title }}</header>
     <form method="dialog">
-      <label v-for="(label, i) in state.labels" :key="i">
+      <label v-for="(label, i) in state.labels" :key="i" @click="onClickLabel">
         <input type="radio" :value="i" v-model="state.selectedIndex" />
         {{ label }}
       </label>
