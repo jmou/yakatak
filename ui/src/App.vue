@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useFetch, whenever } from "@vueuse/core";
+import { refAutoReset, useFetch, whenever } from "@vueuse/core";
 import { computed, nextTick, reactive, ref, useTemplateRef, watch, watchEffect } from "vue";
 import ChooserDialog from "./components/ChooserDialog.vue";
 import DetailsPane from "./components/DetailsPane.vue";
@@ -23,6 +23,18 @@ interface OpLogEntry {
 type Location = readonly [pileIndex: number, cardIndex: number];
 
 const getDeck = reactive(useFetch("/api/deck").json<CardData[]>());
+
+const listSnapshots = reactive(useFetch("/api/snapshots", { immediate: false }).json());
+const postSnapshotBody = ref<unknown | null>(null);
+const postSnapshot = reactive(
+  useFetch("/api/snapshots", { immediate: false }).post(postSnapshotBody).json(),
+);
+const getSnapshotId = ref<string | null>(null);
+const getSnapshot = reactive(
+  useFetch(() => `/api/snapshots/${getSnapshotId.value}`, { immediate: false }).json(),
+);
+
+const status = refAutoReset("", 5000);
 
 const state = reactive({
   piles: [new Pile(), new Pile()],
@@ -150,6 +162,75 @@ function swapPiles(aPileIndex: number, bPileIndex: number): Command | void {
   return ["swapPiles", aPileIndex, bPileIndex];
 }
 
+function serializeState(value: unknown): unknown {
+  if (value === null || typeof value !== "object") {
+    return value as object;
+  }
+  if (Array.isArray(value)) {
+    return value.map(serializeState);
+  }
+  return Object.entries(value).reduce(
+    (acc, [key, value]) => {
+      // TODO remove special case to avoid serializing Elements
+      if (key === "elem") return acc;
+      acc[key] = serializeState(value);
+      return acc;
+    },
+    {} as Record<string, unknown>,
+  );
+}
+
+function deserializeState(target: Record<string, unknown>, snapshot: Record<string, unknown>) {
+  for (const key in snapshot) {
+    const value = snapshot[key];
+    // TODO remove special handling of Pile objects
+    if (key === "piles" && Array.isArray(value)) {
+      type PileData = { name: string; cards: Card[]; picked: number };
+      target[key] = value.map((data: PileData) => new Pile(data));
+    } else if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      target[key] = value;
+    } else {
+      deserializeState(target[key] as Record<string, unknown>, value as Record<string, unknown>);
+    }
+  }
+}
+
+async function takeSnapshot() {
+  // TODO this status text should not auto reset
+  status.value = "Saving...";
+  postSnapshotBody.value = serializeState(state);
+  await postSnapshot.execute();
+  if (postSnapshot.error) {
+    status.value = "ERROR";
+  } else {
+    status.value = "Saved";
+  }
+}
+
+async function restoreSnapshot(): Promise<void> {
+  await listSnapshots.execute();
+  if (listSnapshots.error) {
+    status.value = "ERROR";
+    return;
+  }
+
+  const { snapshots } = listSnapshots.data;
+  getSnapshotId.value = await chooser.value!.ask("Select snapshot", snapshots, snapshots);
+  if (getSnapshotId.value == null) return;
+
+  status.value = "Loading...";
+  await getSnapshot.execute();
+  if (getSnapshot.error) {
+    status.value = "ERROR";
+    return;
+  }
+  status.value = "Loaded";
+
+  deserializeState(state, getSnapshot.data);
+  // The op log will also be restored, which means the restore operation
+  // cannot be undone.
+}
+
 async function applyOpLogReverse() {
   const entry = state.opLog[state.opLogIndex - 1];
   if (!entry) return;
@@ -215,6 +296,9 @@ const opsByName = {
   swapActivePileUp: () => swapPiles(state.active, --state.active),
   swapActivePileDown: () => swapPiles(state.active, ++state.active),
 
+  takeSnapshot,
+  restoreSnapshot,
+
   applyOpLogReverse,
   applyOpLogForward,
 };
@@ -252,6 +336,9 @@ const rootKeyBindings: Readonly<Record<string, Command>> = {
   n: ["nameActivePile"],
   g: ["goToChosenPile"],
   R: ["reverseCardsInPile"],
+
+  s: ["takeSnapshot"],
+  S: ["restoreSnapshot"],
 
   u: ["applyOpLogReverse"],
   U: ["applyOpLogForward"],
@@ -306,6 +393,7 @@ function onKeydown(event: KeyboardEvent) {
       @auto-scroll="scrollToActivePile"
       @focus="detailsElem!.focus()"
     />
+    <div v-if="status" class="status">{{ status }}</div>
     <ChooserDialog ref="chooser" />
   </main>
 </template>
@@ -314,6 +402,15 @@ function onKeydown(event: KeyboardEvent) {
 main {
   display: flex;
   height: 100vh;
+}
+
+.status {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  padding: 2px;
+  background: #eee;
+  border: 1px 0 0 1px solid #888;
 }
 </style>
 

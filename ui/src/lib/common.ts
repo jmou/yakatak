@@ -42,6 +42,14 @@ export class Pile {
   static readonly DISCARD = 0;
   static readonly START = 1;
 
+  constructor(data?: { name: string; cards: Card[]; picked: number }) {
+    if (data) {
+      this.name = data.name;
+      this.cards = data.cards;
+      this.picked = data.picked;
+    }
+  }
+
   pickCardClamped(cardIndex: number) {
     this.picked = Math.max(0, Math.min(cardIndex, this.cards.length - 1));
   }
