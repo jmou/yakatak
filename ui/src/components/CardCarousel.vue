@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useElementSize } from "@vueuse/core";
-import { useTemplateRef, watch, watchEffect } from "vue";
+import { useElementSize, whenever } from "@vueuse/core";
+import { useTemplateRef, watch } from "vue";
 import type { Card } from "../lib/common.ts";
 
 const { cards, picked } = defineProps<{
@@ -17,30 +17,28 @@ const carouselElem = useTemplateRef("carouselElem");
 
 const { width } = useElementSize(carouselElem);
 
-watchEffect(
-  () => {
-    const elem = cards[picked]?.elem;
-    if (elem) {
-      // Typically scrollIntoView() affects all containing overflows. This
-      // throws off vertical scrolling in the piles pane, so we resync on the
-      // autoScroll event.
-      //
-      // The {container: "nearest"} option would change this to only affect
-      // the carousel; we shouldn't need the autoScroll event then. As of
-      // late 2025 it is just starting to see support in Chrome, but not yet
-      // Firefox nor Safari.
-      elem.scrollIntoView({ block: "nearest" });
-      emit("autoScroll");
-    }
+whenever(
+  () => cards[picked]?.elem,
+  (elem) => {
+    // Typically scrollIntoView() affects all containing overflows. This
+    // throws off vertical scrolling in the piles pane, so we resync on the
+    // autoScroll event.
+    //
+    // The {container: "nearest"} option would change this to only affect
+    // the carousel; we shouldn't need the autoScroll event then. As of
+    // late 2025 it is just starting to see support in Chrome, but not yet
+    // Firefox nor Safari.
+    elem.scrollIntoView({ block: "nearest" });
+    emit("autoScroll");
   },
   { flush: "post" },
 );
 
 // Keep the picked card in view if we are resized smaller. Unlike the
 // scrolling to a newly picked card above, this is not a direct user action.
-watch(width, (_, prevWidth) => {
+watch(width, (newWidth, prevWidth) => {
   // TODO we shouldn't scroll if the card was outside the scrollport
-  if (width.value < prevWidth) {
+  if (newWidth < prevWidth) {
     cards[picked]?.elem?.scrollIntoView({ block: "nearest", behavior: "instant" });
   }
 });
