@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { assert } from "@/lib/common";
+import { assert } from "../lib/common.ts";
 import { nextTick, onMounted, reactive, useTemplateRef } from "vue";
 
 // Doesn't provide any type safety but clarifies intention.

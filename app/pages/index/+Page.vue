@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { refAutoReset, useFetch, whenever } from "@vueuse/core";
-import { computed, nextTick, onMounted, reactive, ref, useTemplateRef, watch, watchEffect } from "vue";
-import ChooserDialog from "./components/ChooserDialog.vue";
-import DetailsPane from "./components/DetailsPane.vue";
-import PilesPane from "./components/PilesPane.vue";
-import { assert, Card, checked, Pile, type CardData } from "./lib/common.ts";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  reactive,
+  ref,
+  useTemplateRef,
+  watch,
+  watchEffect,
+} from "vue";
+import ChooserDialog from "../../components/ChooserDialog.vue";
+import DetailsPane from "../../components/DetailsPane.vue";
+import PilesPane from "../../components/PilesPane.vue";
+import { assert, Card, checked, Pile, type CardData } from "../../lib/common.ts";
 
 // A Command describes how to run an operation defined in opsByName. It is
 // a type-checked tuple of the form [opName, ...opArgs].
@@ -419,6 +428,15 @@ main {
 </style>
 
 <style>
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
 :root {
   font-family: system-ui, Arial, Helvetica, sans-serif;
   font-size: 16px;
