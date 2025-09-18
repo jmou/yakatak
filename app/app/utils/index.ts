@@ -11,13 +11,6 @@ export function checked<T>(value: T): NonNullable<T> {
   return value;
 }
 
-export interface CardData {
-  readonly id: string;
-  readonly url: string;
-  readonly title: string;
-  readonly numTiles: number;
-}
-
 export class Card {
   readonly id: string;
   readonly url: string;

@@ -1,6 +1,3 @@
-import type { CardLocation, useCardsStore } from "../stores/cards";
-import { assert, Card, Pile } from "./common";
-
 // https://stackoverflow.com/a/67605309/13773246
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ParametersExceptFirst<F> = F extends (arg0: any, ...rest: infer R) => any ? R : never;
@@ -203,22 +200,6 @@ async function applyOpLogForward(ctx: OperationContext) {
   state.opLogIndex++;
 }
 
-// Perform the operation requested by the Command.
-export async function invokeCommand(ctx: OperationContext, cmd: Command) {
-  const [opName, ...opArgs] = cmd;
-  // This partially elided type exists only to check that all operations return
-  // Command (or void). We still use the discriminated type elsewhere.
-  type FunctionReturnsCommand = (
-    ctx: OperationContext,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...args: any[]
-  ) => Command | void | Promise<Command | void>;
-  // If type checking has an error on this line, there probably exists an
-  // operation in opsByName that does not return Command or void.
-  const opFn: FunctionReturnsCommand = opsByName[opName];
-  return Promise.resolve(opFn(ctx, ...opArgs));
-}
-
 // Operations are actions on state, typically by the user. They return a
 // reciprocable undo Command that restores any nontrivial state; if all
 // modified state is trivial (like which card is picked) it returns void.
@@ -265,3 +246,19 @@ const opsByName = {
   applyOpLogReverse,
   applyOpLogForward,
 };
+
+// Perform the operation requested by the Command.
+export async function invokeCommand(ctx: OperationContext, cmd: Command) {
+  const [opName, ...opArgs] = cmd;
+  // This partially elided type exists only to check that all operations return
+  // Command (or void). We still use the discriminated type elsewhere.
+  type FunctionReturnsCommand = (
+    ctx: OperationContext,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...args: any[]
+  ) => Command | void | Promise<Command | void>;
+  // If type checking has an error on this line, there probably exists an
+  // operation in opsByName that does not return Command or void.
+  const opFn: FunctionReturnsCommand = opsByName[opName];
+  return Promise.resolve(opFn(ctx, ...opArgs));
+}

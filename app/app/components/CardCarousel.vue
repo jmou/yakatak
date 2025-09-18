@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { useElementSize, whenever } from "@vueuse/core";
-import { useTemplateRef, watch } from "vue";
-import type { Card } from "../lib/common.ts";
 
 const { cards, pickedCardIndex } = defineProps<{
   cards: Card[];

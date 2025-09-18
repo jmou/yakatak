@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { Card } from "../lib/common.ts";
-
 interface Props {
   loading: boolean;
   error: string | null;

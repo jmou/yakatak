@@ -1,12 +1,4 @@
 <script setup lang="ts">
-import { storeToRefs } from "pinia";
-import { nextTick, onMounted, ref, useTemplateRef, watch, watchEffect } from "vue";
-import ChooserDialog from "../../components/ChooserDialog.vue";
-import DetailsPane from "../../components/DetailsPane.vue";
-import PilesPane from "../../components/PilesPane.vue";
-import { Command, invokeCommand } from "../../lib/operations.ts";
-import { useCardsStore } from "../../stores/cards.ts";
-
 const cardsStore = useCardsStore();
 const { state } = cardsStore;
 const { activePile, currentLocation, getDeck, pickedCard, status } = storeToRefs(cardsStore);

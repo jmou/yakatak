@@ -1,8 +1,4 @@
 import { refAutoReset, useFetch, whenever } from "@vueuse/core";
-import { defineStore } from "pinia";
-import { computed, reactive, ref, watchEffect } from "vue";
-import { assert, Card, checked, Pile, type CardData } from "../lib/common.ts";
-import { Command } from "../lib/operations.ts";
 
 export type CardLocation = readonly [pileIndex: number, cardIndex: number];
 

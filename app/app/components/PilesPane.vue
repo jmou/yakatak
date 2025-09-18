@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { Pile } from "../lib/common.ts";
-import CardCarousel from "./CardCarousel.vue";
-
 interface Props {
   piles: Pile[];
 }
