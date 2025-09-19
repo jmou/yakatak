@@ -7,10 +7,10 @@ export default defineEventHandler(async (event) => {
   const filePath = path.join(
     config.stateDir,
     "scrape",
-    params.scrapeId,
+    params.scrapeId!,
     "derived",
     "tiles",
-    `${params.tileIndex}.png`,
+    `${params.tileIndex!}.png`,
   );
   setResponseHeader(event, "Content-Type", "image/png");
   return sendStream(event, fs.createReadStream(filePath));

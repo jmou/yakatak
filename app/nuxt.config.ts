@@ -11,9 +11,21 @@ export default defineNuxtConfig({
   },
   ssr: false,
   typescript: {
+    typeCheck: true,
     tsConfig: {
       compilerOptions: {
         erasableSyntaxOnly: true,
+        noUncheckedIndexedAccess: true,
+      },
+    },
+  },
+  nitro: {
+    typescript: {
+      tsConfig: {
+        compilerOptions: {
+          erasableSyntaxOnly: true,
+          noUncheckedIndexedAccess: true,
+        },
       },
     },
   },
