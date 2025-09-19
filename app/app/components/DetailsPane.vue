@@ -1,13 +1,11 @@
 <script setup lang="ts">
-interface Props {
+defineProps<{
   loading: boolean;
   error: string | null;
   card: Card | undefined;
-}
+}>();
 
-const props = defineProps<Props>();
-
-const elem = defineModel("elem");
+const elem = defineModel<HTMLElement>("elem");
 </script>
 
 <template>

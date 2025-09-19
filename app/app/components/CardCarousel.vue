@@ -43,17 +43,17 @@ watch(width, (newWidth, prevWidth) => {
 </script>
 
 <template>
-  <div class="carousel" ref="carouselElem">
+  <div ref="carouselElem" class="carousel">
     <a
       v-for="(card, cardIndex) in cards"
       :key="card.id"
+      :ref="(elem) => (card.elem = elem as Element)"
       :href="card.url"
       class="card"
       :class="{ picked: cardIndex === pickedCardIndex }"
       :style="{ viewTransitionName: `card-${card.id.replace('.', '_')}` }"
       @click.exact.prevent="$emit('pick', cardIndex)"
       v-on="{ focus: $attrs.onFocus }"
-      :ref="(elem) => (card.elem = elem as Element)"
     >
       <img :src="`/api/scrapes/${card.id}/thumb`" :alt="card.title" :title="card.title" />
     </a>

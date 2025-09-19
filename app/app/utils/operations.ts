@@ -25,7 +25,7 @@ async function placeCardInto(
   ctx: OperationContext,
   target: CardLocation,
   options: { source?: CardLocation; followTarget?: boolean } = {},
-): Promise<Command | void> {
+): Promise<Command | undefined> {
   const { source = ctx.store.currentLocation, followTarget = false } = options;
   const { state } = ctx.store;
 
@@ -54,7 +54,7 @@ async function placeCardInto(
 async function movePickedCardToPile(
   ctx: OperationContext,
   pileIndex: number,
-): Promise<Command | void> {
+): Promise<Command | undefined> {
   const pile = ctx.store.state.piles[pileIndex];
   if (!pile) return;
   return placeCardInto(ctx, [pileIndex, pile.cards.length]);
@@ -63,7 +63,7 @@ async function movePickedCardToPile(
 async function swapPickedCardWithNeighbor(
   ctx: OperationContext,
   direction: "left" | "right",
-): Promise<Command | void> {
+): Promise<Command | undefined> {
   const source = ctx.store.currentLocation;
   const offset = direction == "left" ? -1 : 1;
   const target: CardLocation = [source[0], source[1] + offset];
@@ -86,7 +86,7 @@ function createPileAt(ctx: OperationContext, pileIndex: number): Command {
   return ["removePileUnchecked", pileIndex];
 }
 
-function nameActivePile(ctx: OperationContext, name?: string | null): Command | void {
+function nameActivePile(ctx: OperationContext, name?: string | null): Command | undefined {
   if (!name) name = prompt("Pile name", ctx.store.activePile.name);
   if (!name) return;
   const oldName = ctx.store.activePile.name;
@@ -94,7 +94,7 @@ function nameActivePile(ctx: OperationContext, name?: string | null): Command | 
   return ["nameActivePile", oldName];
 }
 
-async function goToChosenPile(ctx: OperationContext): Promise<void> {
+async function goToChosenPile(ctx: OperationContext): Promise<undefined> {
   const options = ctx.store.state.piles
     .slice(1)
     .map((pile, i) => `${i + 1}. ${pile.name ?? "(unnamed)"}`);
@@ -103,7 +103,11 @@ async function goToChosenPile(ctx: OperationContext): Promise<void> {
   ctx.store.state.activePileIndex = position + 1;
 }
 
-function swapPiles(ctx: OperationContext, aPileIndex: number, bPileIndex: number): Command | void {
+function swapPiles(
+  ctx: OperationContext,
+  aPileIndex: number,
+  bPileIndex: number,
+): Command | undefined {
   const { state } = ctx.store;
   const [aPile, bPile] = [state.piles[aPileIndex], state.piles[bPileIndex]];
   if (aPileIndex < Pile.START || bPileIndex < Pile.START || !aPile || !bPile) return;
@@ -144,7 +148,7 @@ function deserializeState(target: Record<string, unknown>, snapshot: Record<stri
   }
 }
 
-async function takeSnapshot(ctx: OperationContext) {
+async function takeSnapshot(ctx: OperationContext): Promise<undefined> {
   // TODO this status text should not auto reset
   ctx.store.status = "Saving...";
   ctx.store.postSnapshotBody = serializeState(ctx.store.state);
@@ -156,7 +160,7 @@ async function takeSnapshot(ctx: OperationContext) {
   }
 }
 
-async function restoreSnapshot(ctx: OperationContext): Promise<void> {
+async function restoreSnapshot(ctx: OperationContext): Promise<undefined> {
   await ctx.store.listSnapshots.execute();
   if (ctx.store.listSnapshots.error) {
     ctx.store.status = "ERROR";
@@ -180,7 +184,7 @@ async function restoreSnapshot(ctx: OperationContext): Promise<void> {
   // cannot be undone.
 }
 
-async function applyOpLogReverse(ctx: OperationContext) {
+async function applyOpLogReverse(ctx: OperationContext): Promise<undefined> {
   const { state } = ctx.store;
   const entry = state.opLog[state.opLogIndex - 1];
   if (!entry) return;
@@ -190,7 +194,7 @@ async function applyOpLogReverse(ctx: OperationContext) {
   state.opLogIndex--;
 }
 
-async function applyOpLogForward(ctx: OperationContext) {
+async function applyOpLogForward(ctx: OperationContext): Promise<undefined> {
   const { state } = ctx.store;
   const entry = state.opLog[state.opLogIndex];
   if (!entry) return;
@@ -202,22 +206,22 @@ async function applyOpLogForward(ctx: OperationContext) {
 
 // Operations are actions on state, typically by the user. They return a
 // reciprocable undo Command that restores any nontrivial state; if all
-// modified state is trivial (like which card is picked) it returns void.
+// modified state is trivial (like which card is picked) it returns undefined.
 const opsByName = {
   pickCardLeft: (ctx: OperationContext) =>
-    ctx.store.activePile.pickCardClamped(ctx.store.activePile.pickedCardIndex - 1),
+    void ctx.store.activePile.pickCardClamped(ctx.store.activePile.pickedCardIndex - 1),
   pickCardRight: (ctx: OperationContext) =>
-    ctx.store.activePile.pickCardClamped(ctx.store.activePile.pickedCardIndex + 1),
-  pickCardFirst: (ctx: OperationContext) => ctx.store.activePile.pickCardClamped(0),
+    void ctx.store.activePile.pickCardClamped(ctx.store.activePile.pickedCardIndex + 1),
+  pickCardFirst: (ctx: OperationContext) => void ctx.store.activePile.pickCardClamped(0),
   pickCardLast: (ctx: OperationContext) =>
-    ctx.store.activePile.pickCardClamped(ctx.store.activePile.cards.length - 1),
+    void ctx.store.activePile.pickCardClamped(ctx.store.activePile.cards.length - 1),
 
   placeCardInto,
   swapPickedCardWithNeighbor,
   movePickedCardToPile,
   discardPickedCard: (ctx: OperationContext) => movePickedCardToPile(ctx, Pile.DISCARD),
 
-  openPickedCardPage: (ctx: OperationContext) => {
+  openPickedCardPage: (ctx: OperationContext): undefined => {
     if (ctx.store.pickedCard) open(ctx.store.pickedCard.url);
   },
 
@@ -251,14 +255,14 @@ const opsByName = {
 export async function invokeCommand(ctx: OperationContext, cmd: Command) {
   const [opName, ...opArgs] = cmd;
   // This partially elided type exists only to check that all operations return
-  // Command (or void). We still use the discriminated type elsewhere.
+  // Command (or undefined). We still use the discriminated type elsewhere.
   type FunctionReturnsCommand = (
     ctx: OperationContext,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
-  ) => Command | void | Promise<Command | void>;
+  ) => Command | undefined | Promise<Command | undefined>;
   // If type checking has an error on this line, there probably exists an
-  // operation in opsByName that does not return Command or void.
+  // operation in opsByName that does not return Command or undefined.
   const opFn: FunctionReturnsCommand = opsByName[opName];
   return Promise.resolve(opFn(ctx, ...opArgs));
 }

@@ -78,7 +78,7 @@ defineExpose({ ask });
     <header>{{ state.title }}</header>
     <form method="dialog">
       <label v-for="(label, i) in state.labels" :key="i" @click="onClickLabel">
-        <input type="radio" :value="i" v-model="state.selectedIndex" />
+        <input v-model="state.selectedIndex" type="radio" :value="i" />
         {{ label }}
       </label>
       <!-- Only exists to allow implicit form submission with Enter key -->

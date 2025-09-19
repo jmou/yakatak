@@ -104,10 +104,10 @@ onMounted(() => detailsElem.value!.focus());
 <template>
   <main>
     <DetailsPane
+      v-model:elem="detailsElem"
       :loading="getDeck.isFetching"
       :error="getDeck.error"
       :card="pickedCard"
-      v-model:elem="detailsElem"
       tabindex="0"
       @keydown="onKeydown"
     />

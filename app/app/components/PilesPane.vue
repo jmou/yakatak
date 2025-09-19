@@ -1,11 +1,9 @@
 <script setup lang="ts">
-interface Props {
+defineProps<{
   piles: Pile[];
-}
+}>();
 
-const props = defineProps<Props>();
-
-const active = defineModel("active");
+const active = defineModel<number>("active");
 </script>
 
 <template>
@@ -13,9 +11,9 @@ const active = defineModel("active");
     <template v-for="(pile, pileIndex) in piles" :key="pileIndex">
       <section
         v-if="pileIndex >= Pile.START"
+        :ref="(elem) => (pile.elem = elem as Element)"
         :class="{ selected: pileIndex === active }"
         @click="active = pileIndex"
-        :ref="(elem) => (pile.elem = elem as Element)"
       >
         <header>
           <span class="index">{{ pileIndex - Pile.START + 1 }}</span> {{ pile.name }}
