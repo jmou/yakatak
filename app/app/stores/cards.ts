@@ -1,5 +1,3 @@
-import { refAutoReset } from "@vueuse/core";
-
 export type CardLocation = readonly [pileIndex: number, cardIndex: number];
 
 // The operation (or undo) log stores pairs of Commands that built up the
@@ -11,8 +9,6 @@ interface OpLogEntry {
 }
 
 export const useCardsStore = defineStore("cards", () => {
-  const status = refAutoReset("", 5000);
-
   const state = reactive({
     piles: [new Pile(), new Pile()],
     activePileIndex: Pile.START,
@@ -41,6 +37,5 @@ export const useCardsStore = defineStore("cards", () => {
     currentLocation,
     pickedCard,
     state,
-    status,
   };
 });

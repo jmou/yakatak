@@ -3,7 +3,7 @@ import { whenever } from "@vueuse/core";
 
 const cardsStore = useCardsStore();
 const { state } = cardsStore;
-const { activePile, currentLocation, pickedCard, status } = storeToRefs(cardsStore);
+const { activePile, currentLocation, pickedCard } = storeToRefs(cardsStore);
 
 function scrollToActivePile() {
   activePile.value.elem?.scrollIntoView?.({ block: "nearest" });
@@ -19,6 +19,27 @@ const { data: deckData, pending, error } = useLazyFetch("/api/deck");
 whenever(deckData, (deck) => {
   state.piles[1]!.cards = deck.map((data) => new Card(data));
 });
+
+const status = ref("");
+let statusTimer: ReturnType<typeof setTimeout> | null = null;
+
+function setStatus(msg: string, options: { transient?: boolean } = {}) {
+  const { transient = false } = options;
+
+  if (statusTimer) {
+    clearTimeout(statusTimer);
+    statusTimer = null;
+  }
+
+  status.value = msg;
+
+  if (transient) {
+    statusTimer = setTimeout(() => {
+      status.value = "";
+      statusTimer = null;
+    }, 5000);
+  }
+}
 
 async function viewTransition(fn: () => void): Promise<void> {
   if (!document.startViewTransition) {
@@ -78,7 +99,7 @@ async function handleKeyEvent(event: KeyboardEvent) {
 
   const location = currentLocation.value;
 
-  const ctx = { store: cardsStore, viewTransition, ask: chooser.value!.ask };
+  const ctx = { store: cardsStore, setStatus, ask: chooser.value!.ask, viewTransition };
   const reverse = await invokeCommand(ctx, forward);
 
   if (reverse) {

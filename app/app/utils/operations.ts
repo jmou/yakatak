@@ -12,6 +12,7 @@ type CardsStore = ReturnType<typeof useCardsStore>;
 
 interface OperationContext {
   store: CardsStore;
+  setStatus: (msg: string, options?: { transient?: boolean }) => void;
   // Ask for a choice, as through ChooserDialog.
   ask: {
     (title: string, labels: string[]): Promise<number | null>;
@@ -149,11 +150,10 @@ function deserializeState(target: Record<string, unknown>, snapshot: Record<stri
 }
 
 async function takeSnapshot(ctx: OperationContext): Promise<undefined> {
-  // TODO this status text should not auto reset
-  ctx.store.status = "Saving...";
+  ctx.setStatus("Saving...");
   const body = serializeState(ctx.store.state) as Record<string, unknown>;
   await $fetch("/api/snapshots", { method: "POST", body });
-  ctx.store.status = "Saved";
+  ctx.setStatus("Saved", { transient: true });
 }
 
 async function restoreSnapshot(ctx: OperationContext): Promise<undefined> {
@@ -161,9 +161,9 @@ async function restoreSnapshot(ctx: OperationContext): Promise<undefined> {
   const snapshotId = await ctx.ask("Select snapshot", snapshots, snapshots);
   if (snapshotId == null) return;
 
-  ctx.store.status = "Loading...";
+  ctx.setStatus("Loading...");
   const data = await $fetch(`/api/snapshots/${snapshotId}`);
-  ctx.store.status = "Loaded";
+  ctx.setStatus("Loaded", { transient: true });
 
   deserializeState(ctx.store.state, data);
   // The op log will also be restored, which means the restore operation
@@ -254,7 +254,7 @@ export async function invokeCommand(
   // operation in opsByName that does not return Command or undefined.
   const opFn: FunctionReturnsCommand = opsByName[opName];
   return Promise.resolve(opFn(ctx, ...opArgs)).catch((error): undefined => {
-    ctx.store.status = "ERROR";
+    ctx.setStatus("ERROR");
     console.error(error);
   });
 }
