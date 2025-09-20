@@ -151,35 +151,21 @@ function deserializeState(target: Record<string, unknown>, snapshot: Record<stri
 async function takeSnapshot(ctx: OperationContext): Promise<undefined> {
   // TODO this status text should not auto reset
   ctx.store.status = "Saving...";
-  ctx.store.postSnapshotBody = serializeState(ctx.store.state);
-  await ctx.store.postSnapshot.execute();
-  if (ctx.store.postSnapshot.error) {
-    ctx.store.status = "ERROR";
-  } else {
-    ctx.store.status = "Saved";
-  }
+  const body = serializeState(ctx.store.state) as Record<string, unknown>;
+  await $fetch("/api/snapshots", { method: "POST", body });
+  ctx.store.status = "Saved";
 }
 
 async function restoreSnapshot(ctx: OperationContext): Promise<undefined> {
-  await ctx.store.listSnapshots.execute();
-  if (ctx.store.listSnapshots.error) {
-    ctx.store.status = "ERROR";
-    return;
-  }
-
-  const { snapshots } = ctx.store.listSnapshots.data;
-  ctx.store.getSnapshotId = await ctx.ask("Select snapshot", snapshots, snapshots);
-  if (ctx.store.getSnapshotId == null) return;
+  const { snapshots } = await $fetch("/api/snapshots");
+  const snapshotId = await ctx.ask("Select snapshot", snapshots, snapshots);
+  if (snapshotId == null) return;
 
   ctx.store.status = "Loading...";
-  await ctx.store.getSnapshot.execute();
-  if (ctx.store.getSnapshot.error) {
-    ctx.store.status = "ERROR";
-    return;
-  }
+  const data = await $fetch(`/api/snapshots/${snapshotId}`);
   ctx.store.status = "Loaded";
 
-  deserializeState(ctx.store.state, ctx.store.getSnapshot.data);
+  deserializeState(ctx.store.state, data);
   // The op log will also be restored, which means the restore operation
   // cannot be undone.
 }
@@ -252,7 +238,10 @@ const opsByName = {
 };
 
 // Perform the operation requested by the Command.
-export async function invokeCommand(ctx: OperationContext, cmd: Command) {
+export async function invokeCommand(
+  ctx: OperationContext,
+  cmd: Command,
+): Promise<Command | undefined> {
   const [opName, ...opArgs] = cmd;
   // This partially elided type exists only to check that all operations return
   // Command (or undefined). We still use the discriminated type elsewhere.
@@ -264,5 +253,8 @@ export async function invokeCommand(ctx: OperationContext, cmd: Command) {
   // If type checking has an error on this line, there probably exists an
   // operation in opsByName that does not return Command or undefined.
   const opFn: FunctionReturnsCommand = opsByName[opName];
-  return Promise.resolve(opFn(ctx, ...opArgs));
+  return Promise.resolve(opFn(ctx, ...opArgs)).catch((error): undefined => {
+    ctx.store.status = "ERROR";
+    console.error(error);
+  });
 }

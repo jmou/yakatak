@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { whenever } from "@vueuse/core";
+
 const cardsStore = useCardsStore();
 const { state } = cardsStore;
-const { activePile, currentLocation, getDeck, pickedCard, status } = storeToRefs(cardsStore);
+const { activePile, currentLocation, pickedCard, status } = storeToRefs(cardsStore);
 
 function scrollToActivePile() {
   activePile.value.elem?.scrollIntoView?.({ block: "nearest" });
@@ -12,6 +14,11 @@ const chooser = useTemplateRef("chooser");
 const detailsElem = ref<HTMLElement>();
 
 watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
+
+const { data: deckData, pending, error } = useLazyFetch("/api/deck");
+whenever(deckData, (deck) => {
+  state.piles[1]!.cards = deck.map((data) => new Card(data));
+});
 
 async function viewTransition(fn: () => void): Promise<void> {
   if (!document.startViewTransition) {
@@ -105,8 +112,8 @@ onMounted(() => detailsElem.value!.focus());
   <main>
     <DetailsPane
       v-model:elem="detailsElem"
-      :loading="getDeck.isFetching"
-      :error="getDeck.error"
+      :pending
+      :error
       :card="pickedCard"
       tabindex="0"
       @keydown="onKeydown"

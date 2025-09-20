@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineProps<{
-  loading: boolean;
-  error: string | null;
+  pending: boolean;
+  error: Error | undefined;
   card: Card | undefined;
 }>();
 
@@ -11,7 +11,7 @@ const elem = defineModel<HTMLElement>("elem");
 <template>
   <div ref="elem" class="details">
     <div class="spacer"></div>
-    <div v-if="loading" class="loading">Loading deck...</div>
+    <div v-if="pending" class="pending">Loading deck...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <template v-else-if="card">
       <div class="meta">{{ card.title }}<br />{{ card.url }}</div>
@@ -62,14 +62,14 @@ const elem = defineModel<HTMLElement>("elem");
   }
 }
 
-.loading,
+.pending,
 .error {
   padding: 40px;
   text-align: center;
   font-size: 18px;
 }
 
-.loading {
+.pending {
   color: #666;
 }
 

@@ -1,4 +1,4 @@
-import { refAutoReset, useFetch, whenever } from "@vueuse/core";
+import { refAutoReset } from "@vueuse/core";
 
 export type CardLocation = readonly [pileIndex: number, cardIndex: number];
 
@@ -11,18 +11,6 @@ interface OpLogEntry {
 }
 
 export const useCardsStore = defineStore("cards", () => {
-  const getDeck = reactive(useFetch("/api/deck").json<CardData[]>());
-
-  const listSnapshots = reactive(useFetch("/api/snapshots", { immediate: false }).json());
-  const postSnapshotBody = ref<unknown | null>(null);
-  const postSnapshot = reactive(
-    useFetch("/api/snapshots", { immediate: false }).post(postSnapshotBody).json(),
-  );
-  const getSnapshotId = ref<string | null>(null);
-  const getSnapshot = reactive(
-    useFetch(() => `/api/snapshots/${getSnapshotId.value}`, { immediate: false }).json(),
-  );
-
   const status = refAutoReset("", 5000);
 
   const state = reactive({
@@ -39,15 +27,6 @@ export const useCardsStore = defineStore("cards", () => {
     activePile.value.pickedCardIndex,
   ]);
 
-  whenever(
-    () => getDeck.isFinished && !getDeck.error,
-    () => {
-      // TODO validate data
-      assert(getDeck.data);
-      state.piles[1]!.cards = getDeck.data.map((data) => new Card(data));
-    },
-  );
-
   // Bounds constrain active.
   watchEffect(() => {
     if (state.activePileIndex < Pile.START) {
@@ -60,13 +39,7 @@ export const useCardsStore = defineStore("cards", () => {
   return {
     activePile,
     currentLocation,
-    getDeck,
-    getSnapshot,
-    getSnapshotId,
-    listSnapshots,
     pickedCard,
-    postSnapshot,
-    postSnapshotBody,
     state,
     status,
   };
