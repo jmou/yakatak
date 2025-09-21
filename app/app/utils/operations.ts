@@ -28,12 +28,14 @@ async function placeCardInto(
   options: { source?: CardLocation; followTarget?: boolean } = {},
 ): Promise<Command | undefined> {
   const { source = ctx.store.currentLocation, followTarget = false } = options;
+  if (source[0] === target[0] && source[1] === target[1]) return;
 
   const [sourcePile, targetPile] = [source, target].map((loc) => ctx.store.piles[loc[0]]);
   const [sourceCardIndex, targetCardIndex] = [source[1], target[1]];
   if (!sourcePile || !targetPile) return;
   if (!sourcePile.cards[sourceCardIndex]) return;
   if (targetCardIndex < 0 || targetCardIndex > targetPile.cards.length) return;
+  if (sourcePile === targetPile && targetCardIndex >= targetPile.cards.length) return;
 
   await ctx.viewTransition(() => {
     const card = sourcePile.cards.splice(sourceCardIndex, 1)[0];
@@ -57,7 +59,11 @@ async function movePickedCardToPile(
 ): Promise<Command | undefined> {
   const pile = ctx.store.piles[pileIndex];
   if (!pile) return;
-  return placeCardInto(ctx, [pileIndex, pile.cards.length]);
+
+  let cardIndex = pile.cards.length;
+  if (pileIndex === ctx.store.activePileIndex) cardIndex--;
+
+  return placeCardInto(ctx, [pileIndex, cardIndex]);
 }
 
 async function swapPickedCardWithNeighbor(
