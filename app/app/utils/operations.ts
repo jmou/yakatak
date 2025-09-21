@@ -96,11 +96,11 @@ function nameActivePile(ctx: OperationContext, name?: string | null): Command | 
 
 async function goToChosenPile(ctx: OperationContext): Promise<undefined> {
   const options = ctx.store.piles
-    .slice(1)
+    .slice(Pile.START)
     .map((pile, i) => `${i + 1}. ${pile.name ?? "(unnamed)"}`);
   const position = await ctx.ask("Piles", options);
   if (position == null) return;
-  ctx.store.activePileIndex = position + 1;
+  ctx.store.activePileIndex = Pile.START + position;
 }
 
 function swapPiles(
@@ -193,10 +193,11 @@ const opsByName = {
 
   reverseCardsInPile,
 
-  activatePileUp: (ctx: OperationContext) => void ctx.store.activePileIndex--,
-  activatePileDown: (ctx: OperationContext) => void ctx.store.activePileIndex++,
+  activatePileUp: (ctx: OperationContext) => void ctx.store.decrementActivePileIndex(),
+  activatePileDown: (ctx: OperationContext) => void ctx.store.incrementActivePileIndex(),
 
   createPileUp: (ctx: OperationContext) => createPileAt(ctx, ctx.store.activePileIndex),
+  // Increment activePileIndex without bounds check to extend the array.
   createPileDown: (ctx: OperationContext) => createPileAt(ctx, ++ctx.store.activePileIndex),
   removePileUnchecked: (ctx: OperationContext, pileIndex: number) =>
     void ctx.store.piles.splice(pileIndex, 1),
@@ -206,9 +207,9 @@ const opsByName = {
 
   swapPiles,
   swapActivePileUp: (ctx: OperationContext) =>
-    swapPiles(ctx, ctx.store.activePileIndex, --ctx.store.activePileIndex),
+    swapPiles(ctx, ctx.store.activePileIndex, ctx.store.decrementActivePileIndex()),
   swapActivePileDown: (ctx: OperationContext) =>
-    swapPiles(ctx, ctx.store.activePileIndex, ++ctx.store.activePileIndex),
+    swapPiles(ctx, ctx.store.activePileIndex, ctx.store.incrementActivePileIndex()),
 
   takeSnapshot,
   restoreSnapshot,

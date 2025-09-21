@@ -21,15 +21,15 @@ export const useCardsStore = defineStore("cards", () => {
     activePile.value.pickedCardIndex,
   ]);
 
-  // Bounds constrain activePileIndex.
-  // TODO this could get watched more than once; use actions instead
-  watchEffect(() => {
-    if (activePileIndex.value < Pile.START) {
-      activePileIndex.value = Pile.START;
-    } else if (activePileIndex.value >= piles.value.length) {
-      activePileIndex.value = piles.value.length - 1;
-    }
-  });
+  function decrementActivePileIndex() {
+    if (activePileIndex.value > Pile.START) activePileIndex.value--;
+    return activePileIndex.value;
+  }
+
+  function incrementActivePileIndex() {
+    if (activePileIndex.value + 1 < piles.value.length) activePileIndex.value++;
+    return activePileIndex.value;
+  }
 
   return {
     // state
@@ -42,5 +42,9 @@ export const useCardsStore = defineStore("cards", () => {
     activePile,
     pickedCard,
     currentLocation,
+
+    // actions
+    decrementActivePileIndex,
+    incrementActivePileIndex,
   };
 });
