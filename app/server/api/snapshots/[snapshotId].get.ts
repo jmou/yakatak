@@ -6,5 +6,5 @@ export default defineEventHandler(async (event) => {
   const params = getRouterParams(event);
   const filePath = path.join(config.stateDir, "snapshots", `${params.snapshotId}.json`);
   const data = await fs.readFile(filePath);
-  return JSON.parse(data.toString());
+  return JSON.parse(data.toString()) as Snapshot;
 });

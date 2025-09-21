@@ -28,9 +28,8 @@ async function placeCardInto(
   options: { source?: CardLocation; followTarget?: boolean } = {},
 ): Promise<Command | undefined> {
   const { source = ctx.store.currentLocation, followTarget = false } = options;
-  const { state } = ctx.store;
 
-  const [sourcePile, targetPile] = [source, target].map((loc) => state.piles[loc[0]]);
+  const [sourcePile, targetPile] = [source, target].map((loc) => ctx.store.piles[loc[0]]);
   const [sourceCardIndex, targetCardIndex] = [source[1], target[1]];
   if (!sourcePile || !targetPile) return;
   if (!sourcePile.cards[sourceCardIndex]) return;
@@ -46,7 +45,7 @@ async function placeCardInto(
     // a pile, the selection follows the picked card to its target location.
     // While our caller could arrange for this update, it would happen after
     // the view transition. To avoid artifacts, we push it down here.
-    if (followTarget) [state.activePileIndex, ctx.store.activePile.pickedCardIndex] = target;
+    if (followTarget) [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = target;
   });
 
   return ["placeCardInto", source, { source: target, followTarget }];
@@ -56,7 +55,7 @@ async function movePickedCardToPile(
   ctx: OperationContext,
   pileIndex: number,
 ): Promise<Command | undefined> {
-  const pile = ctx.store.state.piles[pileIndex];
+  const pile = ctx.store.piles[pileIndex];
   if (!pile) return;
   return placeCardInto(ctx, [pileIndex, pile.cards.length]);
 }
@@ -73,9 +72,9 @@ async function swapPickedCardWithNeighbor(
 
 function reverseCardsInPile(
   ctx: OperationContext,
-  pileIndex: number = ctx.store.state.activePileIndex,
+  pileIndex: number = ctx.store.activePileIndex,
 ): Command {
-  const pile = ctx.store.state.piles[pileIndex];
+  const pile = ctx.store.piles[pileIndex];
   assert(pile);
   pile.cards.reverse();
   pile.pickedCardIndex = pile.cards.length - 1 - pile.pickedCardIndex;
@@ -83,7 +82,7 @@ function reverseCardsInPile(
 }
 
 function createPileAt(ctx: OperationContext, pileIndex: number): Command {
-  ctx.store.state.piles.splice(pileIndex, 0, new Pile());
+  ctx.store.piles.splice(pileIndex, 0, new Pile());
   return ["removePileUnchecked", pileIndex];
 }
 
@@ -96,12 +95,12 @@ function nameActivePile(ctx: OperationContext, name?: string | null): Command | 
 }
 
 async function goToChosenPile(ctx: OperationContext): Promise<undefined> {
-  const options = ctx.store.state.piles
+  const options = ctx.store.piles
     .slice(1)
     .map((pile, i) => `${i + 1}. ${pile.name ?? "(unnamed)"}`);
   const position = await ctx.ask("Piles", options);
   if (position == null) return;
-  ctx.store.state.activePileIndex = position + 1;
+  ctx.store.activePileIndex = position + 1;
 }
 
 function swapPiles(
@@ -109,49 +108,31 @@ function swapPiles(
   aPileIndex: number,
   bPileIndex: number,
 ): Command | undefined {
-  const { state } = ctx.store;
-  const [aPile, bPile] = [state.piles[aPileIndex], state.piles[bPileIndex]];
+  const [aPile, bPile] = [ctx.store.piles[aPileIndex], ctx.store.piles[bPileIndex]];
   if (aPileIndex < Pile.START || bPileIndex < Pile.START || !aPile || !bPile) return;
-  [state.piles[aPileIndex], state.piles[bPileIndex]] = [bPile, aPile];
+  [ctx.store.piles[aPileIndex], ctx.store.piles[bPileIndex]] = [bPile, aPile];
   return ["swapPiles", aPileIndex, bPileIndex];
 }
 
-function serializeState(value: unknown): unknown {
-  if (value === null || typeof value !== "object") {
-    return value as object;
-  }
-  if (Array.isArray(value)) {
-    return value.map(serializeState);
-  }
-  return Object.entries(value).reduce(
-    (acc, [key, value]) => {
-      // TODO remove special case to avoid serializing Elements
-      if (key === "elem") return acc;
-      acc[key] = serializeState(value);
-      return acc;
-    },
-    {} as Record<string, unknown>,
-  );
+function serializeCard(card: Card) {
+  const { id, url, title, numTiles } = card;
+  return { id, url, title, numTiles };
 }
 
-function deserializeState(target: Record<string, unknown>, snapshot: Record<string, unknown>) {
-  for (const key in snapshot) {
-    const value = snapshot[key];
-    // TODO remove special handling of Pile objects
-    if (key === "piles" && Array.isArray(value)) {
-      type PileData = { name: string; cards: Card[]; pickedCardIndex: number };
-      target[key] = value.map((data: PileData) => new Pile(data));
-    } else if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      target[key] = value;
-    } else {
-      deserializeState(target[key] as Record<string, unknown>, value as Record<string, unknown>);
-    }
-  }
+function serializePile(pile: Pile) {
+  const { name, pickedCardIndex } = pile;
+  const cards = pile.cards.map(serializeCard);
+  return { name, cards, pickedCardIndex };
 }
 
 async function takeSnapshot(ctx: OperationContext): Promise<undefined> {
   ctx.setStatus("Saving...");
-  const body = serializeState(ctx.store.state) as Record<string, unknown>;
+  const { piles, activePileIndex, opLog, opLogIndex } = ctx.store;
+  const body: Snapshot = {
+    piles: piles.map(serializePile),
+    activePileIndex,
+    opLog: opLog.slice(0, opLogIndex),
+  };
   await $fetch("/api/snapshots", { method: "POST", body });
   ctx.setStatus("Saved", { transient: true });
 }
@@ -163,31 +144,30 @@ async function restoreSnapshot(ctx: OperationContext): Promise<undefined> {
 
   ctx.setStatus("Loading...");
   const data = await $fetch(`/api/snapshots/${snapshotId}`);
+  ctx.store.piles = data.piles.map((data) => new Pile(data));
+  ctx.store.activePileIndex = data.activePileIndex;
+  // We restore the op log, so the restore operation itself cannot be undone.
+  ctx.store.opLog = data.opLog;
+  ctx.store.opLogIndex = data.opLog.length;
   ctx.setStatus("Loaded", { transient: true });
-
-  deserializeState(ctx.store.state, data);
-  // The op log will also be restored, which means the restore operation
-  // cannot be undone.
 }
 
 async function applyOpLogReverse(ctx: OperationContext): Promise<undefined> {
-  const { state } = ctx.store;
-  const entry = state.opLog[state.opLogIndex - 1];
+  const entry = ctx.store.opLog[ctx.store.opLogIndex - 1];
   if (!entry) return;
 
   await invokeCommand(ctx, entry.reverse);
-  [state.activePileIndex, ctx.store.activePile.pickedCardIndex] = entry.location;
-  state.opLogIndex--;
+  [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = entry.location;
+  ctx.store.opLogIndex--;
 }
 
 async function applyOpLogForward(ctx: OperationContext): Promise<undefined> {
-  const { state } = ctx.store;
-  const entry = state.opLog[state.opLogIndex];
+  const entry = ctx.store.opLog[ctx.store.opLogIndex];
   if (!entry) return;
 
-  [state.activePileIndex, ctx.store.activePile.pickedCardIndex] = entry.location;
+  [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = entry.location;
   await invokeCommand(ctx, entry.forward);
-  state.opLogIndex++;
+  ctx.store.opLogIndex++;
 }
 
 // Operations are actions on state, typically by the user. They return a
@@ -213,22 +193,22 @@ const opsByName = {
 
   reverseCardsInPile,
 
-  activatePileUp: (ctx: OperationContext) => void ctx.store.state.activePileIndex--,
-  activatePileDown: (ctx: OperationContext) => void ctx.store.state.activePileIndex++,
+  activatePileUp: (ctx: OperationContext) => void ctx.store.activePileIndex--,
+  activatePileDown: (ctx: OperationContext) => void ctx.store.activePileIndex++,
 
-  createPileUp: (ctx: OperationContext) => createPileAt(ctx, ctx.store.state.activePileIndex),
-  createPileDown: (ctx: OperationContext) => createPileAt(ctx, ++ctx.store.state.activePileIndex),
+  createPileUp: (ctx: OperationContext) => createPileAt(ctx, ctx.store.activePileIndex),
+  createPileDown: (ctx: OperationContext) => createPileAt(ctx, ++ctx.store.activePileIndex),
   removePileUnchecked: (ctx: OperationContext, pileIndex: number) =>
-    void ctx.store.state.piles.splice(pileIndex, 1),
+    void ctx.store.piles.splice(pileIndex, 1),
 
   nameActivePile,
   goToChosenPile,
 
   swapPiles,
   swapActivePileUp: (ctx: OperationContext) =>
-    swapPiles(ctx, ctx.store.state.activePileIndex, --ctx.store.state.activePileIndex),
+    swapPiles(ctx, ctx.store.activePileIndex, --ctx.store.activePileIndex),
   swapActivePileDown: (ctx: OperationContext) =>
-    swapPiles(ctx, ctx.store.state.activePileIndex, ++ctx.store.state.activePileIndex),
+    swapPiles(ctx, ctx.store.activePileIndex, ++ctx.store.activePileIndex),
 
   takeSnapshot,
   restoreSnapshot,

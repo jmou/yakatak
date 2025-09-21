@@ -1,23 +1,24 @@
 <script setup lang="ts">
 import { whenever } from "@vueuse/core";
 
-const cardsStore = useCardsStore();
-const { state } = cardsStore;
-const { activePile, currentLocation, pickedCard } = storeToRefs(cardsStore);
+const store = useCardsStore();
 
 function scrollToActivePile() {
-  activePile.value.elem?.scrollIntoView?.({ block: "nearest" });
+  store.activePile.elem?.scrollIntoView?.({ block: "nearest" });
 }
 watchEffect(scrollToActivePile);
 
 const chooser = useTemplateRef("chooser");
 const detailsElem = ref<HTMLElement>();
 
-watch(pickedCard, () => (detailsElem.value!.scrollTop = 0));
+watch(
+  () => store.pickedCard,
+  () => (detailsElem.value!.scrollTop = 0),
+);
 
 const { data: deckData, pending, error } = useLazyFetch("/api/deck");
 whenever(deckData, (deck) => {
-  state.piles[1]!.cards = deck.map((data) => new Card(data));
+  store.piles[1]!.cards = deck.map((data) => new Card(data));
 });
 
 const status = ref("");
@@ -97,14 +98,14 @@ async function handleKeyEvent(event: KeyboardEvent) {
   const forward = rootKeyBindings[event.key];
   if (!forward) return;
 
-  const location = currentLocation.value;
+  const location = store.currentLocation;
 
-  const ctx = { store: cardsStore, setStatus, ask: chooser.value!.ask, viewTransition };
+  const ctx = { store: store, setStatus, ask: chooser.value!.ask, viewTransition };
   const reverse = await invokeCommand(ctx, forward);
 
   if (reverse) {
-    state.opLog.splice(state.opLogIndex);
-    state.opLog[state.opLogIndex++] = { forward, reverse, location };
+    store.opLog.splice(store.opLogIndex);
+    store.opLog[store.opLogIndex++] = { forward, reverse, location };
   }
 }
 
@@ -135,13 +136,13 @@ onMounted(() => detailsElem.value!.focus());
       v-model:elem="detailsElem"
       :pending
       :error
-      :card="pickedCard"
+      :card="store.pickedCard"
       tabindex="0"
       @keydown="onKeydown"
     />
     <PilesPane
-      v-model:active="state.activePileIndex"
-      :piles="state.piles"
+      v-model:active="store.activePileIndex"
+      :piles="store.piles"
       tabindex="-1"
       @auto-scroll="scrollToActivePile"
       @focus="detailsElem!.focus()"

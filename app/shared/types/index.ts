@@ -4,3 +4,17 @@ export interface CardData {
   readonly title: string;
   readonly numTiles: number;
 }
+
+export interface PileData {
+  name: string;
+  cards: CardData[];
+  pickedCardIndex: number;
+}
+
+export interface Snapshot {
+  piles: PileData[];
+  activePileIndex: number;
+  // The actual type depends on Command which is only defined in the client
+  // cards store; it is not accessible here.
+  opLog: unknown[];
+}

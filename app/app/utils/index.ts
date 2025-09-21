@@ -35,10 +35,10 @@ export class Pile {
   static readonly DISCARD = 0;
   static readonly START = 1;
 
-  constructor(data?: { name: string; cards: Card[]; pickedCardIndex: number }) {
+  constructor(data?: PileData) {
     if (data) {
       this.name = data.name;
-      this.cards = data.cards;
+      this.cards = data.cards.map((data) => new Card(data));
       this.pickedCardIndex = data.pickedCardIndex;
     }
   }

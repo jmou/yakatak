@@ -9,33 +9,38 @@ interface OpLogEntry {
 }
 
 export const useCardsStore = defineStore("cards", () => {
-  const state = reactive({
-    piles: [new Pile(), new Pile()],
-    activePileIndex: Pile.START,
-    opLog: [] as OpLogEntry[],
-    opLogIndex: 0,
-  });
+  const piles = ref([new Pile(), new Pile()]);
+  const activePileIndex = ref(Pile.START);
+  const opLog = ref<OpLogEntry[]>([]);
+  const opLogIndex = ref(0);
 
-  const activePile = computed(() => checked(state.piles[state.activePileIndex]));
+  const activePile = computed(() => checked(piles.value[activePileIndex.value]));
   const pickedCard = computed(() => activePile.value.cards[activePile.value.pickedCardIndex]);
   const currentLocation = computed<CardLocation>(() => [
-    state.activePileIndex,
+    activePileIndex.value,
     activePile.value.pickedCardIndex,
   ]);
 
-  // Bounds constrain active.
+  // Bounds constrain activePileIndex.
+  // TODO this could get watched more than once; use actions instead
   watchEffect(() => {
-    if (state.activePileIndex < Pile.START) {
-      state.activePileIndex = Pile.START;
-    } else if (state.activePileIndex >= state.piles.length) {
-      state.activePileIndex = state.piles.length - 1;
+    if (activePileIndex.value < Pile.START) {
+      activePileIndex.value = Pile.START;
+    } else if (activePileIndex.value >= piles.value.length) {
+      activePileIndex.value = piles.value.length - 1;
     }
   });
 
   return {
+    // state
+    piles,
+    activePileIndex,
+    opLog,
+    opLogIndex,
+
+    // getters
     activePile,
-    currentLocation,
     pickedCard,
-    state,
+    currentLocation,
   };
 });
