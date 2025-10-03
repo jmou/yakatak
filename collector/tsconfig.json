@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "preserve",
+    "strict": true,
+
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+
+    "noUncheckedIndexedAccess": true
+  }
+}
