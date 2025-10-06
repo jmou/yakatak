@@ -35,23 +35,6 @@ async function launchPage(cdpUrl: string | undefined, url: string) {
   }
 }
 
-// Wait up to one second for a positive scrollTop.
-async function waitForScrollTop(page: Page) {
-  for (let i = 0; i < 10; i++) {
-    await page.waitForTimeout(100);
-    const scrollTop = await page.evaluate(() => document.documentElement.scrollTop);
-    if (scrollTop > 0) return scrollTop;
-  }
-  return 0;
-}
-
-// Scroll up until no content loads above us (for loading infinite scroll).
-async function scrollToVeryTop(page: Page) {
-  do {
-    await page.evaluate(() => (document.documentElement.scrollTop = 0));
-  } while (await waitForScrollTop(page));
-}
-
 function extractRecipientRowMeta(rowElem: HTMLElement) {
   const links = rowElem.querySelectorAll<HTMLAnchorElement>(".message_header a");
   const url = links[links.length - 1]?.href;
@@ -80,22 +63,16 @@ async function main() {
   const { browser, page } = await launchPage(cdpUrl, zulipUrl);
   page.setViewportSize({ width: 1024, height: 768 });
 
-  await scrollToVeryTop(page);
-
   const visitedMessageIds: number[] = [];
   while (true) {
-    // Get the next recipient row with unvisited messages.
+    // Get the recipient row with the last unvisited message.
     const row = (
-      await page.evaluateHandle(
-        (visitedMessageIds) =>
-          [...document.querySelectorAll(".recipient_row")].filter((rowElem: Element) =>
-            [...rowElem.querySelectorAll("[data-message-id]")].some(
-              (msgElem: Element) =>
-                !visitedMessageIds.includes(parseInt(msgElem.getAttribute("data-message-id")!, 10)),
-            ),
-          )[0],
-        visitedMessageIds,
-      )
+      await page.evaluateHandle((visitedMessageIds) => {
+        const msgs = [...document.querySelectorAll<HTMLElement>(".message_row")].filter(
+          (elem) => !visitedMessageIds.includes(parseInt(elem.dataset.messageId!, 10)),
+        );
+        return msgs[msgs.length - 1]?.closest(".recipient_row");
+      }, visitedMessageIds)
     ).asElement();
     if (!row) break;
 
