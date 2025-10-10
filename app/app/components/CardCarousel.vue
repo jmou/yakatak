@@ -26,7 +26,7 @@ whenever(
     // the carousel; we shouldn't need the autoScroll event then. As of
     // late 2025 it is just starting to see support in Chrome, but not yet
     // Firefox nor Safari.
-    elem.scrollIntoView({ block: "nearest" });
+    elem.scrollIntoView({ block: "nearest", behavior: "instant" });
     emit("autoScroll");
   },
   { flush: "post" },
