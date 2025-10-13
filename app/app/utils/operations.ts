@@ -188,6 +188,8 @@ async function applyOpLogForward(ctx: OperationContext): Promise<undefined> {
 // reciprocable undo Command that restores any nontrivial state; if all
 // modified state is trivial (like which card is picked) it returns undefined.
 const opsByName = {
+  pickCard: (ctx: OperationContext, pileIndex: number, cardIndex: number) =>
+    void (ctx.store.piles[pileIndex]!.pickedCardIndex = cardIndex),
   pickCardLeft: (ctx: OperationContext) =>
     void ctx.store.activePile.pickCardClamped(ctx.store.activePile.pickedCardIndex - 1),
   pickCardRight: (ctx: OperationContext) =>

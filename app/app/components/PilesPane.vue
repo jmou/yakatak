@@ -4,6 +4,8 @@ defineProps<{
 }>();
 
 const active = defineModel<number>("active");
+
+const dispatchCommand = useDispatchCommand();
 </script>
 
 <template>
@@ -18,7 +20,11 @@ const active = defineModel<number>("active");
         <header>
           <span class="index">{{ pileIndex - Pile.START + 1 }}</span> {{ pile.name }}
         </header>
-        <CardCarousel :pile v-on="{ focus: $attrs.onFocus }" />
+        <CardCarousel
+          :pile
+          @pick="(cardIndex) => dispatchCommand(['pickCard', pileIndex, cardIndex])"
+          v-on="{ focus: $attrs.onFocus }"
+        />
       </section>
     </template>
   </div>

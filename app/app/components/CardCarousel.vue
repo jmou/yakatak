@@ -6,6 +6,10 @@ const { pile } = defineProps<{
   pile: Pile;
 }>();
 
+const emit = defineEmits<{
+  pick: [cardIndex: number];
+}>();
+
 const carouselElem = ref<HTMLElement>();
 const { width: carouselWidth } = useElementSize(carouselElem);
 const { x: scrollX } = useScroll(carouselElem, { behavior: "instant" });
@@ -57,7 +61,7 @@ const carouselStyle = computed(() => ({
       :key="card.id"
       :card="card"
       :is-picked="realStart + i === pile.pickedCardIndex"
-      @pick="pile.pickCardClamped(realStart + i)"
+      @pick="emit('pick', realStart + i)"
       v-on="{ focus: $attrs.onFocus }"
     />
     <div

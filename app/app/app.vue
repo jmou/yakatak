@@ -92,13 +92,10 @@ const rootKeyBindings: Readonly<Record<string, Command>> = {
   U: ["applyOpLogForward"],
 };
 
-async function handleKeyEvent(event: KeyboardEvent) {
-  const forward = rootKeyBindings[event.key];
-  if (!forward) return;
-
+async function performLoggedCommand(forward: Command) {
   const location = store.currentLocation;
 
-  const ctx = { store: store, setStatus, ask: chooser.value!.ask, viewTransition };
+  const ctx = { store, setStatus, ask: chooser.value!.ask, viewTransition };
   const reverse = await invokeCommand(ctx, forward);
 
   if (reverse) {
@@ -107,23 +104,30 @@ async function handleKeyEvent(event: KeyboardEvent) {
   }
 }
 
-// FIFO to serialize event handling.
-const events: KeyboardEvent[] = [];
-let eventsPromise: Promise<void> | null = null;
+// FIFO to serialize operations.
+const pendingCommands: Command[] = [];
+let processingPromise: Promise<void> | null = null;
 
-async function startEventProcessing() {
+async function startCommandProcessing() {
   while (true) {
-    const event = events.shift();
-    if (!event) break;
-    await handleKeyEvent(event);
+    const cmd = pendingCommands.shift();
+    if (!cmd) break;
+    await performLoggedCommand(cmd);
   }
-  eventsPromise = null;
+  processingPromise = null;
+}
+
+function dispatchCommand(cmd: Command) {
+  pendingCommands.push(cmd);
+  if (!processingPromise) processingPromise = startCommandProcessing();
 }
 
 function onKeydown(event: KeyboardEvent) {
-  events.push(event);
-  if (!eventsPromise) eventsPromise = startEventProcessing();
+  const cmd = rootKeyBindings[event.key];
+  if (cmd) dispatchCommand(cmd);
 }
+
+provide("dispatchCommand", dispatchCommand);
 
 onMounted(() => detailsElem.value!.focus());
 </script>
