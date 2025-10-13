@@ -20,7 +20,7 @@ const active = defineModel<number>("active");
         </header>
         <CardCarousel
           :cards="pile.cards"
-          :pickedCardIndex="pile.pickedCardIndex"
+          :picked-card-index="pile.pickedCardIndex"
           class="carousel"
           @pick="(cardIndex) => pile.pickCardClamped(cardIndex)"
           v-on="{ autoScroll: $attrs.onAutoScroll, focus: $attrs.onFocus }"
