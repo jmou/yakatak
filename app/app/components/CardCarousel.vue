@@ -37,11 +37,16 @@ const emit = defineEmits<{
   scroll-padding: calc(var(--gutter-width) + 5px);
   scrollbar-width: none;
 
-  > *:first-child {
-    margin-left: var(--gutter-width);
-  }
-  > *:last-child {
-    margin-right: var(--gutter-width);
+  > * {
+    flex: none;
+    width: 100px;
+
+    &:first-child {
+      margin-left: var(--gutter-width);
+    }
+    &:last-child {
+      margin-right: var(--gutter-width);
+    }
   }
 
   &::before,

@@ -47,10 +47,10 @@ whenever(
 <style scoped>
 .card {
   display: block;
-  flex: none;
   aspect-ratio: 5 / 7;
   border: 1px solid #ddd;
   border-radius: 6px;
+  margin-top: var(--peek-height);
   opacity: 0.7;
   overflow: hidden;
   cursor: pointer;
@@ -63,14 +63,13 @@ whenever(
     opacity: 1;
   }
 
+  --peek-height: 2px;
   &:hover {
-    transform: translateY(-2px);
+    transform: translateY(calc(-1 * var(--peek-height)));
     opacity: 1;
   }
 
   img {
-    /* Aim for ~20% of original scale. */
-    height: 150px;
     /* Constrain to at least 2/3 of the original viewport height. */
     min-height: 100%;
     max-height: 150%;

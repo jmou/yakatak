@@ -55,7 +55,6 @@ section {
   --pile-padding: 5px;
 
   flex: none;
-  height: 180px;
   padding: var(--pile-padding);
   padding-bottom: 0;
   border: 1px solid #ccc;
