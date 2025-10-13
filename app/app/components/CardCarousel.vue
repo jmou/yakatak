@@ -2,13 +2,8 @@
 import { useElementSize, useScroll } from "@vueuse/core";
 import { computed, ref, watch } from "vue";
 
-const { cards, pickedCardIndex } = defineProps<{
-  cards: Card[];
-  pickedCardIndex: number;
-}>();
-
-const emit = defineEmits<{
-  pick: [cardIndex: number];
+const { pile } = defineProps<{
+  pile: Pile;
 }>();
 
 const carouselElem = ref<HTMLElement>();
@@ -29,13 +24,13 @@ const visibleLength = computed(() => Math.ceil(scrollWidth.value / cardSpacing) 
 const overscan = 1;
 const realStart = computed(() => Math.max(0, visibleStart.value - overscan));
 const realEnd = computed(() =>
-  Math.min(cards.length, visibleStart.value + visibleLength.value + overscan),
+  Math.min(pile.cards.length, visibleStart.value + visibleLength.value + overscan),
 );
 
 watch(
-  [() => pickedCardIndex, carouselWidth],
+  [() => pile.pickedCardIndex, carouselWidth],
   () => {
-    const left = pickedCardIndex * cardSpacing;
+    const left = pile.pickedCardIndex * cardSpacing;
     const right = left + cardWidth + 2 * gutterWidth;
     if (scrollX.value > left) {
       scrollX.value = left;
@@ -58,17 +53,17 @@ const carouselStyle = computed(() => ({
   <div ref="carouselElem" class="carousel" :style="carouselStyle">
     <div v-if="realStart > 0" class="spacer" :style="{ '--num-cards': realStart }"></div>
     <CardCarouselItem
-      v-for="(card, i) in cards.slice(realStart, realEnd)"
+      v-for="(card, i) in pile.cards.slice(realStart, realEnd)"
       :key="card.id"
       :card="card"
-      :is-picked="realStart + i === pickedCardIndex"
-      @pick="emit('pick', realStart + i)"
+      :is-picked="realStart + i === pile.pickedCardIndex"
+      @pick="pile.pickCardClamped(realStart + i)"
       v-on="{ focus: $attrs.onFocus }"
     />
     <div
-      v-if="realEnd < cards.length"
+      v-if="realEnd < pile.cards.length"
       class="spacer"
-      :style="{ '--num-cards': cards.length - realEnd }"
+      :style="{ '--num-cards': pile.cards.length - realEnd }"
     ></div>
   </div>
 </template>

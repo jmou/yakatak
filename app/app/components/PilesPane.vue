@@ -18,13 +18,7 @@ const active = defineModel<number>("active");
         <header>
           <span class="index">{{ pileIndex - Pile.START + 1 }}</span> {{ pile.name }}
         </header>
-        <CardCarousel
-          :cards="pile.cards"
-          :picked-card-index="pile.pickedCardIndex"
-          class="carousel"
-          @pick="(cardIndex) => pile.pickCardClamped(cardIndex)"
-          v-on="{ focus: $attrs.onFocus }"
-        />
+        <CardCarousel :pile v-on="{ focus: $attrs.onFocus }" />
       </section>
     </template>
   </div>
@@ -47,11 +41,7 @@ const active = defineModel<number>("active");
 }
 
 section {
-  --pile-padding: 5px;
-
   flex: none;
-  padding: var(--pile-padding);
-  padding-bottom: 0;
   border: 1px solid #ccc;
   border-radius: 6px;
   background: #eee;
@@ -64,15 +54,15 @@ section {
     outline: 3px solid #acf;
   }
 
-  > header > .index {
-    font-weight: bold;
-    &::after {
-      content: ".";
+  > header {
+    margin: 5px;
+    margin-bottom: 0;
+    > .index {
+      font-weight: bold;
+      &::after {
+        content: ".";
+      }
     }
-  }
-
-  > .carousel {
-    margin: 0 calc(-1 * var(--pile-padding));
   }
 }
 </style>
