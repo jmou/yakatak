@@ -17,9 +17,7 @@ watch(
 );
 
 const { data: deckData, pending, error } = useLazyFetch("/api/deck");
-whenever(deckData, (deck) => {
-  store.piles[1]!.cards = deck.map((data) => new Card(data));
-});
+whenever(deckData, (deck) => (store.piles[1]!.cards = deck));
 
 const status = ref("");
 let statusTimer: ReturnType<typeof setTimeout> | null = null;

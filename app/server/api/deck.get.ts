@@ -5,5 +5,5 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event);
   const filePath = path.join(config.stateDir, "deck.json");
   const data = await fs.readFile(filePath);
-  return JSON.parse(data.toString()) as CardData[];
+  return JSON.parse(data.toString()) as Card[];
 });

@@ -11,21 +11,6 @@ export function checked<T>(value: T): NonNullable<T> {
   return value;
 }
 
-export class Card {
-  readonly id: string;
-  readonly url: string;
-  readonly title: string;
-  readonly numTiles: number;
-  elem: Element | null = null;
-
-  constructor(data: CardData) {
-    this.id = data.id;
-    this.url = data.url;
-    this.title = data.title;
-    this.numTiles = data.numTiles;
-  }
-}
-
 export class Pile {
   name = "";
   cards: Card[] = [];
@@ -38,7 +23,7 @@ export class Pile {
   constructor(data?: PileData) {
     if (data) {
       this.name = data.name;
-      this.cards = data.cards.map((data) => new Card(data));
+      this.cards = data.cards;
       this.pickedCardIndex = data.pickedCardIndex;
     }
   }

@@ -1,4 +1,4 @@
-export interface CardData {
+export interface Card {
   readonly id: string;
   readonly url: string;
   readonly title: string;
@@ -7,7 +7,7 @@ export interface CardData {
 
 export interface PileData {
   name: string;
-  cards: CardData[];
+  cards: Card[];
   pickedCardIndex: number;
 }
 

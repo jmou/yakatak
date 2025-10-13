@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { useElementSize, whenever } from "@vueuse/core";
-
 const { cards, pickedCardIndex } = defineProps<{
   cards: Card[];
   pickedCardIndex: number;
@@ -10,53 +8,19 @@ const emit = defineEmits<{
   pick: [cardIndex: number];
   autoScroll: [];
 }>();
-
-const carouselElem = useTemplateRef("carouselElem");
-
-const { width } = useElementSize(carouselElem);
-
-whenever(
-  () => cards[pickedCardIndex]?.elem,
-  (elem) => {
-    // Typically scrollIntoView() affects all containing overflows. This
-    // throws off vertical scrolling in the piles pane, so we resync on the
-    // autoScroll event.
-    //
-    // The {container: "nearest"} option would change this to only affect
-    // the carousel; we shouldn't need the autoScroll event then. As of
-    // late 2025 it is just starting to see support in Chrome, but not yet
-    // Firefox nor Safari.
-    elem.scrollIntoView({ block: "nearest", behavior: "instant" });
-    emit("autoScroll");
-  },
-  { flush: "post" },
-);
-
-// Keep the picked card in view if we are resized smaller. Unlike the
-// scrolling to a newly picked card above, this is not a direct user action.
-watch(width, (newWidth, prevWidth) => {
-  // TODO we shouldn't scroll if the card was outside the scrollport
-  if (newWidth < prevWidth) {
-    cards[pickedCardIndex]?.elem?.scrollIntoView({ block: "nearest", behavior: "instant" });
-  }
-});
 </script>
 
 <template>
-  <div ref="carouselElem" class="carousel">
-    <a
+  <div class="carousel">
+    <CardCarouselItem
       v-for="(card, cardIndex) in cards"
       :key="card.id"
-      :ref="(elem) => (card.elem = elem as Element)"
-      :href="card.url"
-      class="card"
-      :class="{ picked: cardIndex === pickedCardIndex }"
-      :style="{ viewTransitionName: `card-${card.id.replace('.', '_')}` }"
-      @click.exact.prevent="$emit('pick', cardIndex)"
+      :card="card"
+      :is-picked="cardIndex === pickedCardIndex"
+      @pick="emit('pick', cardIndex)"
+      @auto-scroll="emit('autoScroll')"
       v-on="{ focus: $attrs.onFocus }"
-    >
-      <img :src="`/api/scrapes/${card.id}/thumb`" :alt="card.title" :title="card.title" />
-    </a>
+    />
   </div>
 </template>
 
@@ -72,6 +36,14 @@ watch(width, (newWidth, prevWidth) => {
   scroll-behavior: smooth;
   scroll-padding: calc(var(--gutter-width) + 5px);
   scrollbar-width: none;
+
+  > *:first-child {
+    margin-left: var(--gutter-width);
+  }
+  > *:last-child {
+    margin-right: var(--gutter-width);
+  }
+
   &::before,
   &::after {
     content: "";
@@ -105,57 +77,6 @@ watch(width, (newWidth, prevWidth) => {
   }
 }
 
-.card {
-  display: block;
-  flex: none;
-  aspect-ratio: 5 / 7;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  opacity: 0.7;
-  overflow: hidden;
-  cursor: pointer;
-
-  transition: transform 0.15s ease;
-  view-transition-class: card;
-
-  &.picked {
-    border-color: #666;
-    opacity: 1;
-  }
-
-  &:first-child {
-    margin-left: var(--gutter-width);
-  }
-  &:last-child {
-    margin-right: var(--gutter-width);
-  }
-
-  &:hover {
-    transform: translateY(-2px);
-    opacity: 1;
-  }
-
-  img {
-    /* Aim for ~20% of original scale. */
-    height: 150px;
-    /* Constrain to at least 2/3 of the original viewport height. */
-    min-height: 100%;
-    max-height: 150%;
-  }
-}
-
-/* If this is a single unnested selector, we lose the non-global portion;
-   the nested selectors work as expected. */
-:global(.selected) {
-  .card.picked {
-    border-color: #38f;
-    outline: 3px solid #acf;
-    /* This is not normally significant, but it paints view transitions above
-       other cards. */
-    z-index: 1;
-  }
-}
-
 @keyframes reveal {
   from {
     opacity: 0;
@@ -167,40 +88,6 @@ watch(width, (newWidth, prevWidth) => {
   from,
   to {
     --can-scroll: ;
-  }
-}
-</style>
-
-<style>
-::view-transition-group(root) {
-  animation-duration: 0s;
-}
-
-/* Workaround to prevent cards from painting over the details pane; not an
-   actual transition. */
-::view-transition-group(details) {
-  animation-duration: 0s;
-  z-index: 1;
-}
-
-@keyframes slide-up {
-  to {
-    opacity: 0;
-    transform: translateY(-20%);
-  }
-}
-
-::view-transition-old(.card):only-child,
-::view-transition-new(.card):only-child {
-  animation-name: slide-up;
-}
-::view-transition-new(.card):only-child {
-  animation-direction: reverse;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(.card) {
-    animation-duration: 0s;
   }
 }
 </style>
