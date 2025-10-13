@@ -25,9 +25,9 @@ interface OperationContext {
 async function placeCardInto(
   ctx: OperationContext,
   target: CardLocation,
-  options: { source?: CardLocation; followTarget?: boolean } = {},
+  options: { source?: CardLocation; restorePicked?: number; followTarget?: boolean } = {},
 ): Promise<Command | undefined> {
-  const { source = ctx.store.currentLocation, followTarget = false } = options;
+  const { source = ctx.store.currentLocation, restorePicked, followTarget = false } = options;
   if (source[0] === target[0] && source[1] === target[1]) return;
 
   const [sourcePile, targetPile] = [source, target].map((loc) => ctx.store.piles[loc[0]]);
@@ -37,11 +37,18 @@ async function placeCardInto(
   if (targetCardIndex < 0 || targetCardIndex > targetPile.cards.length) return;
   if (sourcePile === targetPile && targetCardIndex >= targetPile.cards.length) return;
 
+  const originalTargetPicked = targetPile.pickedCardIndex;
+
   await ctx.viewTransition(() => {
     const card = sourcePile.cards.splice(sourceCardIndex, 1)[0];
     assert(card);
-    sourcePile.pickCardClamped(sourcePile.pickedCardIndex);
+    if (restorePicked !== undefined) {
+      sourcePile.pickedCardIndex = restorePicked;
+    } else {
+      sourcePile.pickCardClamped(sourcePile.pickedCardIndex);
+    }
     targetPile.cards.splice(targetCardIndex, 0, card);
+    targetPile.pickedCardIndex = targetCardIndex;
 
     // followTarget exists for cosmetic reasons. When swapping cards within
     // a pile, the selection follows the picked card to its target location.
@@ -50,7 +57,8 @@ async function placeCardInto(
     if (followTarget) [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = target;
   });
 
-  return ["placeCardInto", source, { source: target, followTarget }];
+  const reverseOptions = { source: target, followTarget, restorePicked: originalTargetPicked };
+  return ["placeCardInto", source, reverseOptions];
 }
 
 async function movePickedCardToPile(
