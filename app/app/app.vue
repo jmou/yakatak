@@ -142,7 +142,6 @@ onMounted(() => detailsElem.value!.focus());
       v-model:active="store.activePileIndex"
       :piles="store.piles"
       tabindex="-1"
-      @auto-scroll="scrollToActivePile"
       @focus="detailsElem!.focus()"
     />
     <div v-if="status" class="status">{{ status }}</div>

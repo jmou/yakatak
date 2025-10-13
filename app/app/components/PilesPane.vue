@@ -4,10 +4,6 @@ defineProps<{
 }>();
 
 const active = defineModel<number>("active");
-
-const emit = defineEmits<{
-  autoScroll: [];
-}>();
 </script>
 
 <template>
@@ -27,7 +23,6 @@ const emit = defineEmits<{
           :picked-card-index="pile.pickedCardIndex"
           class="carousel"
           @pick="(cardIndex) => pile.pickCardClamped(cardIndex)"
-          @auto-scroll="emit('autoScroll')"
           v-on="{ focus: $attrs.onFocus }"
         />
       </section>

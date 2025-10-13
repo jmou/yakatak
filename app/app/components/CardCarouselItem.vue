@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { whenever } from "@vueuse/core";
-
 const { card, isPicked } = defineProps<{
   card: Card;
   isPicked: boolean;
@@ -10,25 +8,7 @@ const elem = useTemplateRef("elem");
 
 const emit = defineEmits<{
   pick: [];
-  autoScroll: [];
 }>();
-
-whenever(
-  () => isPicked,
-  () => {
-    // Typically scrollIntoView() affects all containing overflows. This
-    // throws off vertical scrolling in the piles pane, so we resync on the
-    // autoScroll event.
-    //
-    // The {container: "nearest"} option would change this to only affect
-    // the carousel; we shouldn't need the autoScroll event then. As of
-    // late 2025 it is just starting to see support in Chrome, but not yet
-    // Firefox nor Safari.
-    elem.value!.scrollIntoView({ block: "nearest", behavior: "instant" });
-    emit("autoScroll");
-  },
-  { flush: "post" },
-);
 </script>
 
 <template>
