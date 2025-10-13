@@ -6,19 +6,22 @@ defineProps<{
 const active = defineModel<number>("active");
 
 const dispatchCommand = useDispatchCommand();
+
+const activeElem = ref<HTMLElement>();
+watchEffect(() => activeElem.value?.scrollIntoView({ block: "nearest" }));
 </script>
 
 <template>
   <div class="piles">
     <template v-for="(pile, pileIndex) in piles" :key="pileIndex">
       <section
-        v-if="pileIndex >= Pile.START"
-        :ref="(elem) => (pile.elem = elem as Element)"
+        v-if="pileIndex >= PILE_START"
+        :ref="(elem) => pileIndex === active && (activeElem = elem as HTMLElement)"
         :class="{ selected: pileIndex === active }"
         @click="active = pileIndex"
       >
         <header>
-          <span class="index">{{ pileIndex - Pile.START + 1 }}</span> {{ pile.name }}
+          <span class="index">{{ pileIndex - PILE_START + 1 }}</span> {{ pile.name }}
         </header>
         <CardCarousel
           :pile

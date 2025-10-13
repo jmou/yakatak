@@ -3,11 +3,6 @@ import { whenever } from "@vueuse/core";
 
 const store = useCardsStore();
 
-function scrollToActivePile() {
-  store.activePile.elem?.scrollIntoView?.({ block: "nearest" });
-}
-watchEffect(scrollToActivePile);
-
 const chooser = useTemplateRef("chooser");
 const detailsElem = ref<HTMLElement>();
 

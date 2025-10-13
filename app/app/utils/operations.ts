@@ -22,6 +22,10 @@ interface OperationContext {
   viewTransition: (fn: () => void) => Promise<void>;
 }
 
+function pickCardClamped(pile: Pile, cardIndex: number): undefined {
+  pile.pickedCardIndex = Math.max(0, Math.min(cardIndex, pile.cards.length - 1));
+}
+
 async function placeCardInto(
   ctx: OperationContext,
   target: CardLocation,
@@ -45,7 +49,7 @@ async function placeCardInto(
     if (restorePicked !== undefined) {
       sourcePile.pickedCardIndex = restorePicked;
     } else {
-      sourcePile.pickCardClamped(sourcePile.pickedCardIndex);
+      pickCardClamped(sourcePile, sourcePile.pickedCardIndex);
     }
     targetPile.cards.splice(targetCardIndex, 0, card);
     targetPile.pickedCardIndex = targetCardIndex;
@@ -96,7 +100,7 @@ function reverseCardsInPile(
 }
 
 function createPileAt(ctx: OperationContext, pileIndex: number): Command {
-  ctx.store.piles.splice(pileIndex, 0, new Pile());
+  ctx.store.insertPile(pileIndex);
   return ["removePileUnchecked", pileIndex];
 }
 
@@ -110,11 +114,11 @@ function nameActivePile(ctx: OperationContext, name?: string | null): Command | 
 
 async function goToChosenPile(ctx: OperationContext): Promise<undefined> {
   const options = ctx.store.piles
-    .slice(Pile.START)
+    .slice(PILE_START)
     .map((pile, i) => `${i + 1}. ${pile.name ?? "(unnamed)"}`);
   const position = await ctx.ask("Piles", options);
   if (position == null) return;
-  ctx.store.activePileIndex = Pile.START + position;
+  ctx.store.activePileIndex = PILE_START + position;
 }
 
 function swapPiles(
@@ -123,7 +127,7 @@ function swapPiles(
   bPileIndex: number,
 ): Command | undefined {
   const [aPile, bPile] = [ctx.store.piles[aPileIndex], ctx.store.piles[bPileIndex]];
-  if (aPileIndex < Pile.START || bPileIndex < Pile.START || !aPile || !bPile) return;
+  if (aPileIndex < PILE_START || bPileIndex < PILE_START || !aPile || !bPile) return;
   [ctx.store.piles[aPileIndex], ctx.store.piles[bPileIndex]] = [bPile, aPile];
   return ["swapPiles", aPileIndex, bPileIndex];
 }
@@ -158,7 +162,7 @@ async function restoreSnapshot(ctx: OperationContext): Promise<undefined> {
 
   ctx.setStatus("Loading...");
   const data = await $fetch(`/api/snapshots/${snapshotId}`);
-  ctx.store.piles = data.piles.map((data) => new Pile(data));
+  ctx.store.piles = data.piles;
   ctx.store.activePileIndex = data.activePileIndex;
   // We restore the op log, so the restore operation itself cannot be undone.
   ctx.store.opLog = data.opLog;
@@ -189,19 +193,19 @@ async function applyOpLogForward(ctx: OperationContext): Promise<undefined> {
 // modified state is trivial (like which card is picked) it returns undefined.
 const opsByName = {
   pickCard: (ctx: OperationContext, pileIndex: number, cardIndex: number) =>
-    void (ctx.store.piles[pileIndex]!.pickedCardIndex = cardIndex),
+    pickCardClamped(ctx.store.piles[pileIndex]!, cardIndex),
   pickCardLeft: (ctx: OperationContext) =>
-    void ctx.store.activePile.pickCardClamped(ctx.store.activePile.pickedCardIndex - 1),
+    pickCardClamped(ctx.store.activePile, ctx.store.activePile.pickedCardIndex - 1),
   pickCardRight: (ctx: OperationContext) =>
-    void ctx.store.activePile.pickCardClamped(ctx.store.activePile.pickedCardIndex + 1),
-  pickCardFirst: (ctx: OperationContext) => void ctx.store.activePile.pickCardClamped(0),
+    pickCardClamped(ctx.store.activePile, ctx.store.activePile.pickedCardIndex + 1),
+  pickCardFirst: (ctx: OperationContext) => pickCardClamped(ctx.store.activePile, 0),
   pickCardLast: (ctx: OperationContext) =>
-    void ctx.store.activePile.pickCardClamped(ctx.store.activePile.cards.length - 1),
+    pickCardClamped(ctx.store.activePile, ctx.store.activePile.cards.length - 1),
 
   placeCardInto,
   swapPickedCardWithNeighbor,
   movePickedCardToPile,
-  discardPickedCard: (ctx: OperationContext) => movePickedCardToPile(ctx, Pile.DISCARD),
+  discardPickedCard: (ctx: OperationContext) => movePickedCardToPile(ctx, PILE_DISCARD),
 
   openPickedCardPage: (ctx: OperationContext): undefined => {
     if (ctx.store.pickedCard) open(ctx.store.pickedCard.url);

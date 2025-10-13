@@ -8,9 +8,16 @@ interface OpLogEntry {
   location: CardLocation;
 }
 
+export const PILE_DISCARD = 0;
+export const PILE_START = 1;
+
+function newPile(): Pile {
+  return { name: "", cards: [], pickedCardIndex: 0 };
+}
+
 export const useCardsStore = defineStore("cards", () => {
-  const piles = ref([new Pile(), new Pile()]);
-  const activePileIndex = ref(Pile.START);
+  const piles = ref([newPile(), newPile()]);
+  const activePileIndex = ref(PILE_START);
   const opLog = ref<OpLogEntry[]>([]);
   const opLogIndex = ref(0);
 
@@ -21,8 +28,12 @@ export const useCardsStore = defineStore("cards", () => {
     activePile.value.pickedCardIndex,
   ]);
 
+  function insertPile(pileIndex: number) {
+    piles.value.splice(pileIndex, 0, newPile());
+  }
+
   function decrementActivePileIndex() {
-    if (activePileIndex.value > Pile.START) activePileIndex.value--;
+    if (activePileIndex.value > PILE_START) activePileIndex.value--;
     return activePileIndex.value;
   }
 
@@ -44,6 +55,7 @@ export const useCardsStore = defineStore("cards", () => {
     currentLocation,
 
     // actions
+    insertPile,
     decrementActivePileIndex,
     incrementActivePileIndex,
   };
