@@ -55,7 +55,8 @@ const carouselStyle = computed(() => ({
 
 <template>
   <div ref="carouselElem" class="carousel" :style="carouselStyle">
-    <div v-if="realStart > 0" class="spacer" :style="{ '--num-cards': realStart }"></div>
+    <CardCarouselItem v-if="pile.cards.length === 0" class="vertical-spacer" />
+    <div v-if="realStart > 0" class="horizontal-spacer" :style="{ '--num-cards': realStart }"></div>
     <CardCarouselItem
       v-for="(card, i) in pile.cards.slice(realStart, realEnd)"
       :key="card.id"
@@ -66,7 +67,7 @@ const carouselStyle = computed(() => ({
     />
     <div
       v-if="realEnd < pile.cards.length"
-      class="spacer"
+      class="horizontal-spacer"
       :style="{ '--num-cards': pile.cards.length - realEnd }"
     ></div>
   </div>
@@ -130,8 +131,12 @@ const carouselStyle = computed(() => ({
   }
 }
 
-.spacer {
+.horizontal-spacer {
   width: calc(var(--num-cards) * (var(--card-width) + var(--gap)) - var(--gap));
+}
+
+.vertical-spacer {
+  visibility: hidden;
 }
 
 @keyframes reveal {

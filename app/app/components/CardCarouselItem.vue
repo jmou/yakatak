@@ -1,26 +1,33 @@
 <script setup lang="ts">
-const { card, isPicked } = defineProps<{
-  card: Card;
-  isPicked: boolean;
+const { card = null, isPicked = false } = defineProps<{
+  card?: Card;
+  isPicked?: boolean;
 }>();
-
-const elem = useTemplateRef("elem");
 
 const emit = defineEmits<{
   pick: [];
 }>();
+
+const elem = useTemplateRef("elem");
+
+const imgSrc = computed(() => (card ? `/api/scrapes/${card.id}/thumb` : undefined));
+
+const style = computed(() => {
+  if (!card) return undefined;
+  return { viewTransitionName: `card-${card.id.replace(".", "_")}` };
+});
 </script>
 
 <template>
   <a
     ref="elem"
-    :href="card.url"
+    :href="card?.url"
     class="card"
     :class="{ picked: isPicked }"
-    :style="{ viewTransitionName: `card-${card.id.replace('.', '_')}` }"
+    :style
     @click.exact.prevent="emit('pick')"
   >
-    <img :src="`/api/scrapes/${card.id}/thumb`" :alt="card.title" :title="card.title" />
+    <img :src="imgSrc" :alt="card?.title" :title="card?.title" />
   </a>
 </template>
 
