@@ -19,8 +19,6 @@ const elem = defineModel<HTMLElement>("elem");
         v-for="tileIndex in Array.from({ length: card.numTiles }, (_, i) => i)"
         :key="tileIndex"
         :src="`/api/scrapes/${card.id}/tiles/${tileIndex}`"
-        width="1024"
-        :height="tileIndex < card.numTiles - 1 ? 1024 : undefined"
         loading="lazy"
       />
     </template>
@@ -31,6 +29,7 @@ const elem = defineModel<HTMLElement>("elem");
 .details {
   display: flex;
   flex-direction: column;
+  align-items: start;
   border-right: 1px solid #ccc;
   overflow: auto;
   scrollbar-gutter: stable;
@@ -58,6 +57,15 @@ const elem = defineModel<HTMLElement>("elem");
     background: #eee;
     &:hover {
       opacity: 0.3;
+    }
+  }
+
+  > img {
+    flex: none;
+    max-width: 1024px;
+    height: 1024px;
+    &:last-child {
+      height: auto;
     }
   }
 }
