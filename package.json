@@ -4,6 +4,7 @@
   "workspaces": [
     "app",
     "collector",
+    "db",
     "scrape"
   ]
 }

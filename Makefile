@@ -1,5 +1,4 @@
 LIMIT = 10
-NPX ?= npx
 
 icloud/CloudTabs.db:
 	rsync macmini:Library/Containers/com.apple.Safari/Data/Library/Safari/CloudTabs.db icloud/
@@ -14,7 +13,7 @@ urls.txt: ipad-urls.txt
 	head -n $(LIMIT) $< > $@
 
 state/scrape/: scrape/src/scrape.ts urls.txt
-	$(NPX) -c 'xargs tsx scrape/src/scrape.ts' < urls.txt
+	npx -c 'xargs tsx scrape/src/scrape.ts' < urls.txt
 
 state/derived.mark: derive.py state/scrape/
 	for i in state/scrape/*; do uv run derive.py $$i; done
@@ -22,3 +21,7 @@ state/derived.mark: derive.py state/scrape/
 
 state/deck.json: state_to_deck.py state/derived.mark
 	python3 state_to_deck.py $$(ls -d state/scrape/* | sort -t- -k2) > $@
+
+state/db.sqlite3: db/src/migrate-state.ts state/derived.mark
+	rm -f $@
+	npx tsx $< $@ $$PWD/state/scrape/*
