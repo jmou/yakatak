@@ -105,8 +105,8 @@ function createPileAt(ctx: OperationContext, pileIndex: number): Command {
 }
 
 function nameActivePile(ctx: OperationContext, name?: string | null): Command | undefined {
-  if (!name) name = prompt("Pile name", ctx.store.activePile.name);
-  if (!name) return;
+  if (name == null) name = prompt("Pile name", ctx.store.activePile.name);
+  if (name == null) return;
   const oldName = ctx.store.activePile.name;
   ctx.store.activePile.name = name;
   return ["nameActivePile", oldName];
