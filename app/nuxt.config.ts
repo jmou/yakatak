@@ -7,7 +7,7 @@ export default defineNuxtConfig({
     head: { title: "Yakatak" },
   },
   runtimeConfig: {
-    stateDir: `${process.cwd()}/../state`,
+    dbPath: `${process.cwd()}/../state/db.sqlite3`,
   },
   ssr: false,
   typescript: {

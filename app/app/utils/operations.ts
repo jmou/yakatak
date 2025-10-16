@@ -157,7 +157,11 @@ async function takeSnapshot(ctx: OperationContext): Promise<undefined> {
 
 async function restoreSnapshot(ctx: OperationContext): Promise<undefined> {
   const { snapshots } = await $fetch("/api/snapshots");
-  const snapshotId = await ctx.ask("Select snapshot", snapshots, snapshots);
+  const snapshotId = await ctx.ask(
+    "Select snapshot",
+    snapshots.map((s) => s.createdAt),
+    snapshots.map((s) => s.id),
+  );
   if (snapshotId == null) return;
 
   ctx.setStatus("Loading...");

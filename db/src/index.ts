@@ -45,6 +45,10 @@ export class YakatakDb {
     this.db.pragma("foreign_keys = ON");
   }
 
+  async init() {
+    return ensureDatabaseSchema(this.db);
+  }
+
   close() {
     this.db.close();
   }

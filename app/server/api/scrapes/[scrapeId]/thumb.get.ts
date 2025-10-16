@@ -1,10 +1,19 @@
 import fs from "node:fs";
-import path from "node:path";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event);
+  const db = await getDb(config.dbPath);
   const params = getRouterParams(event);
-  const filePath = path.join(config.stateDir, "scrape", params.scrapeId!, "derived", "thumb.png");
+  const cardId = parseInt(params.scrapeId!, 10);
+
+  const filePath = db.getThumbnailPath(cardId);
+  if (!filePath) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Thumbnail not found",
+    });
+  }
+
   setResponseHeader(event, "Content-Type", "image/png");
   return sendStream(event, fs.createReadStream(filePath));
 });
