@@ -60,6 +60,18 @@ CREATE TABLE collect_job (
 
 CREATE INDEX idx_collect_job_claimed_at ON collect_job(claimed_at) WHERE claimed_at IS NULL;
 
+CREATE TABLE postprocess_job (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  capture_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  claimed_at TEXT,
+  claimed_by TEXT,
+  FOREIGN KEY(capture_id) REFERENCES capture(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_postprocess_job_capture_id ON postprocess_job(capture_id);
+CREATE INDEX idx_postprocess_job_claimed_at ON postprocess_job(claimed_at) WHERE claimed_at IS NULL;
+
 CREATE TABLE snapshot (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   data TEXT NOT NULL,

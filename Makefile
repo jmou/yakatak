@@ -21,12 +21,8 @@ state/scrape/: scrape/src/scrape.ts state/added.mark
 	npx tsx $< state/db.sqlite3 $$PWD/state/scrape
 
 state/derived.mark: derive.py state/scrape/
-	for i in state/scrape/*; do uv run derive.py $$i; done
+	uv run derive.py state/db.sqlite3
 	touch $@
 
 state/deck.json: state_to_deck.py state/derived.mark
 	python3 state_to_deck.py $$(ls -d state/scrape/* | sort -t- -k2) > $@
-
-state/db.sqlite3: db/src/migrate-state.ts state/derived.mark
-	rm -f $@
-	npx tsx $< $@ $$PWD/state/scrape/*

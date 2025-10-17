@@ -115,10 +115,16 @@ export class YakatakDb {
 
     const createCapture = this.db.prepare<
       [number, string | null, number, number | null, string],
-      void
+      { id: number }
     >(`
       INSERT INTO capture (card_id, title, detail_image_file_id, har_file_id, metadata)
       VALUES (?, ?, ?, ?, jsonb(?))
+      RETURNING id
+    `);
+
+    const createPostprocessJob = this.db.prepare<[number], void>(`
+      INSERT INTO postprocess_job (capture_id)
+      VALUES (?)
     `);
 
     const transaction = this.db.transaction(() => {
@@ -126,13 +132,15 @@ export class YakatakDb {
       const detailImageFile = ensureFile.get(detailImagePath)!;
       const harFile = harPath ? ensureFile.get(harPath)! : null;
 
-      createCapture.run(
+      const capture = createCapture.get(
         card.id,
         title,
         detailImageFile.id,
         harFile?.id ?? null,
         JSON.stringify(metadata)
       )!;
+
+      createPostprocessJob.run(capture.id);
 
       deleteJob.run(collectJobId);
     });
