@@ -1,6 +1,7 @@
-import { createHash } from "node:crypto";
+import { YakatakDb } from "@yakatak/db";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
+import * as path from "node:path";
 import * as playwright from "playwright";
 
 // TODO consider additional scrape formats:
@@ -13,25 +14,35 @@ import * as playwright from "playwright";
 
 class ScrapeRecorder {
   private browser: Promise<playwright.Browser>;
-  private baseDir: string;
+  private stateDir: string;
+  private db: YakatakDb;
+  private workerId: string;
 
-  constructor(baseDir: string) {
-    this.baseDir = baseDir;
+  private constructor(dbPath: string, stateDir: string) {
+    this.stateDir = stateDir;
+    this.db = new YakatakDb(dbPath);
     this.browser = playwright.chromium.launch();
+    this.workerId = `scrape:${os.hostname()}:${process.pid}`;
+  }
+
+  static async new(dbPath: string, stateDir: string) {
+    const recorder = new ScrapeRecorder(dbPath, stateDir);
+    await recorder.db.init();
+    return recorder;
   }
 
   async [Symbol.asyncDispose]() {
+    this.db.close();
     await (await this.browser).close();
   }
 
-  async scrape(url: string) {
-    const hash = createHash("SHA1").update(url).digest("hex");
-    const timestamp = new Date().toISOString();
-    const dir = `${this.baseDir}/${hash}-${timestamp.replace(/[-:]/g, "")}`;
-
+  private async scrape(url: string, dir: string) {
     console.info(`Scraping ${url} to ${dir}`);
 
-    const recordHar = { path: `${dir}/har.zip` };
+    const screenshotPath = path.join(dir, "w1024.png");
+    const harPath = path.join(dir, "har.zip");
+
+    const recordHar = { path: harPath };
     const viewport = { width: 1024, height: 768 };
     const browser = await this.browser;
     const context = await browser.newContext({ viewport, recordHar });
@@ -39,25 +50,67 @@ class ScrapeRecorder {
     const page = await context.newPage();
     await page.goto(url);
 
-    await page.screenshot({ path: `${dir}/w1024.png`, fullPage: true });
+    await page.screenshot({ path: screenshotPath, fullPage: true });
 
     await context.close();
 
-    const meta = { url, timestamp, hostname: os.hostname() };
-    await fs.writeFile(`${dir}/meta.json`, JSON.stringify(meta));
+    return { screenshotPath, harPath };
+  }
+
+  // TODO poll with semaphore
+  async scrapeAll() {
+    const jobs = [];
+    while (true) {
+      const job = this.db.claimCollectJob(this.workerId);
+      if (!job) break;
+      jobs.push(job);
+    }
+
+    for (const outcome of await Promise.allSettled(
+      jobs.map(async (job) => {
+        const timestamp = new Date().toISOString();
+        const dir = path.join(this.stateDir, "" + job.id);
+        const url = job.source.url;
+
+        const { screenshotPath, harPath } = await this.scrape(url, dir);
+
+        const metadata = {
+          captured_at: timestamp,
+          worker: this.workerId,
+        };
+
+        // TODO remove compatibility output
+        await fs.writeFile(`${dir}/meta.json`, JSON.stringify({ url }));
+
+        this.db.completeCollectJob(
+          job.id,
+          job.source,
+          url,
+          screenshotPath,
+          harPath,
+          metadata
+        );
+      })
+    )) {
+      if (outcome.status === "rejected") {
+        console.error(`Failed to scrape: ${outcome.reason}`);
+        process.exitCode = 1;
+      }
+    }
   }
 }
 
 async function main() {
-  await using recorder = new ScrapeRecorder("state/scrape");
-  for (const outcome of await Promise.allSettled(
-    process.argv.slice(2).map((url) => recorder.scrape(url)),
-  )) {
-    if (outcome.status === "rejected") {
-      console.error(`Failed to scrape: ${outcome.reason}`);
-      process.exitCode = 1;
-    }
+  const [, scriptPath, dbPath, stateDir, ...extraArgs] = process.argv;
+  if (!dbPath || !stateDir || extraArgs.length > 0) {
+    console.error(
+      `Usage: node ${scriptPath} <database-path> <state-directory>`
+    );
+    process.exit(1);
   }
+
+  await using recorder = await ScrapeRecorder.new(dbPath, stateDir);
+  await recorder.scrapeAll();
 }
 
 await main();

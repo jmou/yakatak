@@ -12,8 +12,13 @@ ipad-urls.txt: icloud/tabs.csv
 urls.txt: ipad-urls.txt
 	head -n $(LIMIT) $< > $@
 
-state/scrape/: scrape/src/scrape.ts urls.txt
-	npx -c 'xargs tsx scrape/src/scrape.ts' < urls.txt
+state/added.mark: db/src/add-urls.ts urls.txt
+	rm -f state/db.sqlite3
+	npx tsx $< state/db.sqlite3 < urls.txt
+	touch $@
+
+state/scrape/: scrape/src/scrape.ts state/added.mark
+	npx tsx $< state/db.sqlite3 $$PWD/state/scrape
 
 state/derived.mark: derive.py state/scrape/
 	for i in state/scrape/*; do uv run derive.py $$i; done

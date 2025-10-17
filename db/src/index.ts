@@ -2,6 +2,16 @@ import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+interface UrlSource {
+  type: "url";
+  url: string;
+}
+
+interface CollectJob {
+  id: number;
+  source: UrlSource;
+}
+
 interface Card {
   id: number;
   url: string | null;
@@ -51,6 +61,81 @@ export class YakatakDb {
 
   close() {
     this.db.close();
+  }
+
+  claimCollectJob(claimedBy: string): CollectJob | undefined {
+    const stmt = this.db.prepare<[string], { id: number; source: string }>(`
+      UPDATE collect_job
+      SET claimed_at = datetime('now'), claimed_by = ?
+      WHERE id = (
+        SELECT id FROM collect_job
+        WHERE claimed_at IS NULL
+        ORDER BY created_at ASC
+        LIMIT 1
+      )
+      RETURNING id, json(source) AS source
+    `);
+
+    const row = stmt.get(claimedBy);
+
+    return row
+      ? { id: row.id, source: JSON.parse(row.source) as UrlSource }
+      : undefined;
+  }
+
+  completeCollectJob(
+    collectJobId: number,
+    cardKey: {},
+    url: string | null,
+    detailImagePath: string,
+    harPath: string | null,
+    metadata: {}
+  ): void {
+    const deleteJob = this.db.prepare<[number], void>(`
+      DELETE FROM collect_job WHERE id = ?
+    `);
+
+    const upsertCard = this.db.prepare<
+      [string, string | null],
+      { id: number }
+    >(`
+      INSERT INTO card (key, url)
+      VALUES (jsonb(?), ?)
+      ON CONFLICT(key) DO UPDATE SET url = excluded.url
+      RETURNING id
+    `);
+
+    const ensureFile = this.db.prepare<[string], { id: number }>(`
+      INSERT INTO file (path)
+      VALUES (?)
+      ON CONFLICT(path) DO UPDATE SET path = excluded.path
+      RETURNING id
+    `);
+
+    const createCapture = this.db.prepare<
+      [number, number, number | null, string],
+      void
+    >(`
+      INSERT INTO capture (card_id, detail_image_file_id, har_file_id, metadata)
+      VALUES (?, ?, ?, jsonb(?))
+    `);
+
+    const transaction = this.db.transaction(() => {
+      const card = upsertCard.get(JSON.stringify(cardKey), url)!;
+      const detailImageFile = ensureFile.get(detailImagePath)!;
+      const harFile = harPath ? ensureFile.get(harPath)! : null;
+
+      createCapture.run(
+        card.id,
+        detailImageFile.id,
+        harFile?.id ?? null,
+        JSON.stringify(metadata)
+      )!;
+
+      deleteJob.run(collectJobId);
+    });
+
+    transaction();
   }
 
   // TODO use deck table
