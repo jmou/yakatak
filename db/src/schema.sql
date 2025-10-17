@@ -16,9 +16,10 @@ CREATE INDEX idx_card_created_at ON card(created_at DESC);
 CREATE TABLE capture (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   card_id INTEGER NOT NULL,
+  title TEXT,
   detail_image_file_id INTEGER NOT NULL,
   har_file_id INTEGER,
-  -- e.g., jsonb('{"title": "Example Domain", "captured_at": "2025-10-16T05:17:00Z"}')
+  -- e.g., jsonb('{"captured_at": "2025-10-16T05:17:00Z"}')
   metadata BLOB,
   FOREIGN KEY(card_id) REFERENCES card(id) ON DELETE RESTRICT,
   FOREIGN KEY(detail_image_file_id) REFERENCES file(id) ON DELETE RESTRICT,

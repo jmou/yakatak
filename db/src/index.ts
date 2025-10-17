@@ -87,6 +87,7 @@ export class YakatakDb {
     collectJobId: number,
     cardKey: {},
     url: string | null,
+    title: string | null,
     detailImagePath: string,
     harPath: string | null,
     metadata: {}
@@ -113,11 +114,11 @@ export class YakatakDb {
     `);
 
     const createCapture = this.db.prepare<
-      [number, number, number | null, string],
+      [number, string | null, number, number | null, string],
       void
     >(`
-      INSERT INTO capture (card_id, detail_image_file_id, har_file_id, metadata)
-      VALUES (?, ?, ?, jsonb(?))
+      INSERT INTO capture (card_id, title, detail_image_file_id, har_file_id, metadata)
+      VALUES (?, ?, ?, ?, jsonb(?))
     `);
 
     const transaction = this.db.transaction(() => {
@@ -127,6 +128,7 @@ export class YakatakDb {
 
       createCapture.run(
         card.id,
+        title,
         detailImageFile.id,
         harFile?.id ?? null,
         JSON.stringify(metadata)
@@ -144,7 +146,7 @@ export class YakatakDb {
       SELECT
         card.id,
         card.url,
-        json_extract(capture.metadata, '$.title') AS title,
+        capture.title,
         COUNT(tile.id) AS numTiles
       FROM card
       LEFT JOIN capture ON capture.id = (

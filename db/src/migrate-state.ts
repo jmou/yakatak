@@ -93,11 +93,11 @@ async function main() {
   `);
 
   const insertCapture = db.prepare<
-    [number, number, number | null, string],
+    [number, string | null, number, number | null, string],
     { id: number }
   >(`
-    INSERT INTO capture (card_id, detail_image_file_id, har_file_id, metadata)
-    VALUES (?, ?, ?, jsonb(?))
+    INSERT INTO capture (card_id, title, detail_image_file_id, har_file_id, metadata)
+    VALUES (?, ?, ?, ?, jsonb(?))
     RETURNING id
   `);
 
@@ -136,13 +136,13 @@ async function main() {
       const harFile = harExists ? ensureFile.get(harPath) : null;
 
       const metadata = {
-        title: derived.title,
         captured_at: meta.timestamp,
         hostname: meta.hostname,
       };
 
       const capture = insertCapture.get(
         card.id,
+        derived.title ?? null,
         detailImageFile.id,
         harFile?.id ?? null,
         JSON.stringify(metadata)

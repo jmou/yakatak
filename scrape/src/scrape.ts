@@ -52,9 +52,10 @@ class ScrapeRecorder {
 
     await page.screenshot({ path: screenshotPath, fullPage: true });
 
+    const title = await page.title();
     await context.close();
 
-    return { screenshotPath, harPath };
+    return { title, screenshotPath, harPath };
   }
 
   // TODO poll with semaphore
@@ -72,7 +73,7 @@ class ScrapeRecorder {
         const dir = path.join(this.stateDir, "" + job.id);
         const url = job.source.url;
 
-        const { screenshotPath, harPath } = await this.scrape(url, dir);
+        const { title, screenshotPath, harPath } = await this.scrape(url, dir);
 
         const metadata = {
           captured_at: timestamp,
@@ -86,6 +87,7 @@ class ScrapeRecorder {
           job.id,
           job.source,
           url,
+          title,
           screenshotPath,
           harPath,
           metadata
