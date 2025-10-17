@@ -7,17 +7,14 @@ icloud/CloudTabs.db:
 icloud/tabs.csv: icloud/tabs_to_csv.py icloud/CloudTabs.db
 	python3 $^ > $@
 
-scrape/src/scrape.js: scrape/src/scrape.ts
-	cd scrape && $(NPX) tsc
-
 ipad-urls.txt: icloud/tabs.csv
 	grep ^1EBFBD4B-F483-44C6-9808-DFBE4097937C, $< | tail -n+1 | cut -d, -f3 > $@
 
 urls.txt: ipad-urls.txt
 	head -n $(LIMIT) $< > $@
 
-state/scrape/: scrape/src/scrape.js urls.txt
-	$(NPX) -c 'xargs node scrape/src/scrape.js' < urls.txt
+state/scrape/: scrape/src/scrape.ts urls.txt
+	$(NPX) -c 'xargs tsx scrape/src/scrape.ts' < urls.txt
 
 state/derived.mark: derive.py state/scrape/
 	for i in state/scrape/*; do uv run derive.py $$i; done

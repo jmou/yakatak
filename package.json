@@ -1,0 +1,9 @@
+{
+  "name": "yakatak",
+  "private": true,
+  "workspaces": [
+    "app",
+    "collector",
+    "scrape"
+  ]
+}

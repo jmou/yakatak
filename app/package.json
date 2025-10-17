@@ -1,6 +1,7 @@
 {
-  "type": "module",
+  "name": "@yakatak/app",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",

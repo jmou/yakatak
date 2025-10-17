@@ -1,6 +1,6 @@
 {
-  "name": "yakatak-collector",
-  "private": "true",
+  "name": "@yakatak/collector",
+  "private": true,
   "type": "module",
   "scripts": {
     "cdp": "tsx src/index.ts ../state/zulip http://localhost:9222",
