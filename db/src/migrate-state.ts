@@ -92,25 +92,33 @@ async function main() {
     RETURNING id
   `);
 
-  const insertCapture = db.prepare<
-    [number, string | null, number, number | null, string],
+  const insertDetail = db.prepare<
+    [number, number, string | null, string],
     { id: number }
   >(`
-    INSERT INTO capture (card_id, title, detail_image_file_id, har_file_id, metadata)
-    VALUES (?, ?, ?, ?, jsonb(?))
+    INSERT INTO detail (card_id, image_file_id, title, metadata)
+    VALUES (?, ?, ?, jsonb(?))
     RETURNING id
   `);
 
+  const insertCrawl = db.prepare<
+    [string, number, string | null, string],
+    void
+  >(`
+    INSERT INTO crawl (url, har_file_id, title, metadata)
+    VALUES (?, ?, ?, jsonb(?))
+  `);
+
   const insertThumbnail = db.prepare<[number, number], void>(`
-    INSERT INTO thumbnail (capture_id, file_id)
+    INSERT INTO thumbnail (detail_id, file_id)
     VALUES (?, ?)
-    ON CONFLICT(capture_id) DO NOTHING
+    ON CONFLICT(detail_id) DO NOTHING
   `);
 
   const insertTile = db.prepare<[number, number, number], void>(`
-    INSERT INTO tile (capture_id, tile_index, file_id)
+    INSERT INTO tile (detail_id, tile_index, file_id)
     VALUES (?, ?, ?)
-    ON CONFLICT(capture_id, tile_index) DO NOTHING
+    ON CONFLICT(detail_id, tile_index) DO NOTHING
   `);
 
   for (const scrapeDir of scrapeDirs) {
@@ -136,29 +144,38 @@ async function main() {
       const harFile = harExists ? ensureFile.get(harPath) : null;
 
       const metadata = {
-        captured_at: meta.timestamp,
+        crawled_at: meta.timestamp,
         hostname: meta.hostname,
       };
 
-      const capture = insertCapture.get(
+      const detail = insertDetail.get(
         card.id,
-        derived.title ?? null,
         detailImageFile.id,
-        harFile?.id ?? null,
-        JSON.stringify(metadata)
+        derived.title ?? null,
+        JSON.stringify(metadata),
       );
-      if (!capture) throw new Error("Failed to insert capture");
+      if (!detail) throw new Error("Failed to insert detail");
+
+      let crawlId: number | null = null;
+      if (harFile) {
+        insertCrawl.run(
+          meta.url,
+          harFile.id,
+          derived.title ?? null,
+          JSON.stringify(metadata),
+        );
+      }
 
       const thumbFile = ensureFile.get(derived.thumbPath);
       if (!thumbFile) throw new Error("Failed to insert thumb file");
-      insertThumbnail.run(capture.id, thumbFile.id);
+      insertThumbnail.run(detail.id, thumbFile.id);
 
       for (let i = 0; i < derived.tilePaths.length; i++) {
         const tilePath = derived.tilePaths[i];
         if (!tilePath) continue;
         const tileFile = ensureFile.get(tilePath);
         if (!tileFile) throw new Error(`Failed to insert tile file ${i}`);
-        insertTile.run(capture.id, i, tileFile.id);
+        insertTile.run(detail.id, i, tileFile.id);
       }
     });
 

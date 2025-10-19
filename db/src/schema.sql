@@ -13,41 +13,49 @@ CREATE TABLE card (
 
 CREATE INDEX idx_card_created_at ON card(created_at DESC);
 
-CREATE TABLE capture (
+CREATE TABLE detail (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   card_id INTEGER NOT NULL,
+  image_file_id INTEGER NOT NULL,
   title TEXT,
-  detail_image_file_id INTEGER NOT NULL,
-  har_file_id INTEGER,
-  -- e.g., jsonb('{"captured_at": "2025-10-16T05:17:00Z"}')
+  -- e.g., jsonb('{"crawl_id": 42}')
   metadata BLOB,
   FOREIGN KEY(card_id) REFERENCES card(id) ON DELETE RESTRICT,
-  FOREIGN KEY(detail_image_file_id) REFERENCES file(id) ON DELETE RESTRICT,
-  FOREIGN KEY(har_file_id) REFERENCES file(id) ON DELETE SET NULL
+  FOREIGN KEY(image_file_id) REFERENCES file(id) ON DELETE RESTRICT
 );
 
-CREATE INDEX idx_capture_card_id ON capture(card_id);
+CREATE INDEX idx_detail_card_id ON detail(card_id);
 
 CREATE TABLE thumbnail (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  capture_id INTEGER NOT NULL UNIQUE,
+  detail_id INTEGER NOT NULL UNIQUE,
   file_id INTEGER NOT NULL,
-  FOREIGN KEY(capture_id) REFERENCES capture(id) ON DELETE CASCADE,
+  FOREIGN KEY(detail_id) REFERENCES detail(id) ON DELETE CASCADE,
   FOREIGN KEY(file_id) REFERENCES file(id) ON DELETE RESTRICT
 );
 
 CREATE TABLE tile (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  capture_id INTEGER NOT NULL,
+  detail_id INTEGER NOT NULL,
   tile_index INTEGER NOT NULL,
   file_id INTEGER NOT NULL,
-  FOREIGN KEY(capture_id) REFERENCES capture(id) ON DELETE CASCADE,
+  FOREIGN KEY(detail_id) REFERENCES detail(id) ON DELETE CASCADE,
   FOREIGN KEY(file_id) REFERENCES file(id) ON DELETE RESTRICT,
-  UNIQUE(capture_id, tile_index)
+  UNIQUE(detail_id, tile_index)
 );
 
-CREATE INDEX idx_tile_capture_id ON tile(capture_id);
+CREATE INDEX idx_tile_detail_id ON tile(detail_id);
 CREATE INDEX idx_tile_file_id ON tile(file_id);
+
+CREATE TABLE crawl (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  url TEXT NOT NULL UNIQUE,
+  har_file_id INTEGER NOT NULL,
+  title TEXT,
+  -- e.g., jsonb('{"crawled_at": "2025-10-16T05:17:00Z"}')
+  metadata BLOB,
+  FOREIGN KEY(har_file_id) REFERENCES file(id) ON DELETE SET NULL
+);
 
 CREATE TABLE collect_job (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,14 +70,14 @@ CREATE INDEX idx_collect_job_claimed_at ON collect_job(claimed_at) WHERE claimed
 
 CREATE TABLE postprocess_job (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  capture_id INTEGER NOT NULL UNIQUE,
+  detail_id INTEGER NOT NULL UNIQUE,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   claimed_at TEXT,
   claimed_by TEXT,
-  FOREIGN KEY(capture_id) REFERENCES capture(id) ON DELETE RESTRICT
+  FOREIGN KEY(detail_id) REFERENCES detail(id) ON DELETE RESTRICT
 );
 
-CREATE INDEX idx_postprocess_job_capture_id ON postprocess_job(capture_id);
+CREATE INDEX idx_postprocess_job_detail_id ON postprocess_job(detail_id);
 CREATE INDEX idx_postprocess_job_claimed_at ON postprocess_job(claimed_at) WHERE claimed_at IS NULL;
 
 CREATE TABLE snapshot (

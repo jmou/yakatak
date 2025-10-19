@@ -29,7 +29,7 @@ interface Snapshot {
 }
 
 export async function ensureDatabaseSchema(
-  db: Database.Database
+  db: Database.Database,
 ): Promise<void> {
   // Heuristic if database is initialized by looking for card table.
   const tableExists = db
@@ -90,7 +90,7 @@ export class YakatakDb {
     title: string | null,
     detailImagePath: string,
     harPath: string | null,
-    metadata: {}
+    metadata: {},
   ): void {
     const deleteJob = this.db.prepare<[number], void>(`
       DELETE FROM collect_job WHERE id = ?
@@ -113,17 +113,25 @@ export class YakatakDb {
       RETURNING id
     `);
 
-    const createCapture = this.db.prepare<
-      [number, string | null, number, number | null, string],
+    const createDetail = this.db.prepare<
+      [number, number, string | null, string],
       { id: number }
     >(`
-      INSERT INTO capture (card_id, title, detail_image_file_id, har_file_id, metadata)
-      VALUES (?, ?, ?, ?, jsonb(?))
+      INSERT INTO detail (card_id, image_file_id, title, metadata)
+      VALUES (?, ?, ?, jsonb(?))
       RETURNING id
     `);
 
+    const createCrawl = this.db.prepare<
+      [string, number, string | null, string],
+      void
+    >(`
+      INSERT INTO crawl (url, har_file_id, title, metadata)
+      VALUES (?, ?, ?, jsonb(?))
+    `);
+
     const createPostprocessJob = this.db.prepare<[number], void>(`
-      INSERT INTO postprocess_job (capture_id)
+      INSERT INTO postprocess_job (detail_id)
       VALUES (?)
     `);
 
@@ -132,15 +140,18 @@ export class YakatakDb {
       const detailImageFile = ensureFile.get(detailImagePath)!;
       const harFile = harPath ? ensureFile.get(harPath)! : null;
 
-      const capture = createCapture.get(
+      const detail = createDetail.get(
         card.id,
-        title,
         detailImageFile.id,
-        harFile?.id ?? null,
-        JSON.stringify(metadata)
+        title,
+        JSON.stringify(metadata),
       )!;
 
-      createPostprocessJob.run(capture.id);
+      if (harFile && url) {
+        createCrawl.run(url, harFile.id, title, JSON.stringify(metadata))!;
+      }
+
+      createPostprocessJob.run(detail.id);
 
       deleteJob.run(collectJobId);
     });
@@ -154,16 +165,16 @@ export class YakatakDb {
       SELECT
         card.id,
         card.url,
-        capture.title,
+        detail.title,
         COUNT(tile.id) AS numTiles
       FROM card
-      LEFT JOIN capture ON capture.id = (
-        SELECT id FROM capture
+      LEFT JOIN detail ON detail.id = (
+        SELECT id FROM detail
         WHERE card_id = card.id
         ORDER BY id DESC
         LIMIT 1
       )
-      LEFT JOIN tile ON tile.capture_id = capture.id
+      LEFT JOIN tile ON tile.detail_id = detail.id
       GROUP BY card.id
       ORDER BY card.created_at DESC
     `);
@@ -173,11 +184,11 @@ export class YakatakDb {
   getThumbnailPath(cardId: number): string | undefined {
     const stmt = this.db.prepare<[number], File>(`
       SELECT file.path
-      FROM capture
-      JOIN thumbnail ON thumbnail.capture_id = capture.id
+      FROM detail
+      JOIN thumbnail ON thumbnail.detail_id = detail.id
       JOIN file ON file.id = thumbnail.file_id
-      WHERE capture.card_id = ?
-      ORDER BY capture.id DESC
+      WHERE detail.card_id = ?
+      ORDER BY detail.id DESC
       LIMIT 1
     `);
     return stmt.get(cardId)?.path;
@@ -186,11 +197,11 @@ export class YakatakDb {
   getTilePath(cardId: number, tileIndex: number): string | undefined {
     const stmt = this.db.prepare<[number, number], File>(`
       SELECT file.path
-      FROM capture
-      JOIN tile ON tile.capture_id = capture.id
+      FROM detail
+      JOIN tile ON tile.detail_id = detail.id
       JOIN file ON file.id = tile.file_id
-      WHERE capture.card_id = ? AND tile.tile_index = ?
-      ORDER BY capture.id DESC
+      WHERE detail.card_id = ? AND tile.tile_index = ?
+      ORDER BY detail.id DESC
       LIMIT 1
     `);
     return stmt.get(cardId, tileIndex)?.path;
@@ -207,7 +218,7 @@ export class YakatakDb {
 
   getSnapshot(id: number): {} | undefined {
     const stmt = this.db.prepare<[number], { data: string }>(
-      "SELECT data FROM snapshot WHERE id = ?"
+      "SELECT data FROM snapshot WHERE id = ?",
     );
     const row = stmt.get(id);
     return row ? JSON.parse(row.data) : undefined;

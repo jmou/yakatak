@@ -76,7 +76,7 @@ class ScrapeRecorder {
         const { title, screenshotPath, harPath } = await this.scrape(url, dir);
 
         const metadata = {
-          captured_at: timestamp,
+          crawled_at: timestamp,
           worker: this.workerId,
         };
 

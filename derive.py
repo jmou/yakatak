@@ -64,9 +64,9 @@ def process_from_database(db_path: Path):
         )
         RETURNING
             id,
-            capture_id,
+            detail_id,
             (SELECT path FROM file WHERE file.id = (
-                SELECT detail_image_file_id FROM capture WHERE capture.id = capture_id
+                SELECT image_file_id FROM detail WHERE detail.id = detail_id
             )) as detail_image_path
     """,
         ("derive.py",),
@@ -78,11 +78,11 @@ def process_from_database(db_path: Path):
         return False
 
     job_id = row["id"]
-    capture_id = row["capture_id"]
+    detail_id = row["detail_id"]
     detail_image_path = Path(row["detail_image_path"])
     conn.commit()
 
-    print(f"Processing capture {capture_id} image {detail_image_path}")
+    print(f"Processing detail {detail_id} image {detail_image_path}")
 
     out_dir = detail_image_path.parent / "derived"
     try:
@@ -114,11 +114,11 @@ def process_from_database(db_path: Path):
 
         cursor.execute(
             """
-            INSERT INTO thumbnail (capture_id, file_id)
+            INSERT INTO thumbnail (detail_id, file_id)
             VALUES (?, ?)
-            ON CONFLICT(capture_id) DO UPDATE SET file_id = excluded.file_id
+            ON CONFLICT(detail_id) DO UPDATE SET file_id = excluded.file_id
         """,
-            (capture_id, thumb_file_id),
+            (detail_id, thumb_file_id),
         )
 
         for tile_index, tile_path in enumerate(tile_files):
@@ -135,11 +135,11 @@ def process_from_database(db_path: Path):
 
             cursor.execute(
                 """
-                INSERT INTO tile (capture_id, tile_index, file_id)
+                INSERT INTO tile (detail_id, tile_index, file_id)
                 VALUES (?, ?, ?)
-                ON CONFLICT(capture_id, tile_index) DO UPDATE SET file_id = excluded.file_id
+                ON CONFLICT(detail_id, tile_index) DO UPDATE SET file_id = excluded.file_id
             """,
-                (capture_id, tile_index, tile_file_id),
+                (detail_id, tile_index, tile_file_id),
             )
 
         cursor.execute("DELETE FROM postprocess_job WHERE id = ?", (job_id,))
