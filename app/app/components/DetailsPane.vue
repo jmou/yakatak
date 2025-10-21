@@ -20,7 +20,7 @@ const elem = defineModel<HTMLElement>("elem");
         v-for="tileIndex in Array.from({ length: card.numTiles }, (_, i) => i)"
         :key="tileIndex"
         :src="`/api/scrapes/${card.id}/tiles/${tileIndex}`"
-        loading="lazy"
+        :loading="tileIndex === 0 ? undefined : 'lazy'"
       />
     </template>
   </div>
