@@ -4,6 +4,7 @@ import { whenever, useScroll } from "@vueuse/core";
 const store = useCardsStore();
 
 const chooser = useTemplateRef("chooser");
+const helpDialog = useTemplateRef("helpDialog");
 const detailsElem = ref<HTMLElement>();
 
 const { y: scrollY } = useScroll(detailsElem);
@@ -119,12 +120,14 @@ const rootKeyBindings: Readonly<Record<string, Command>> = {
 
   u: ["applyOpLogReverse"],
   U: ["applyOpLogForward"],
+
+  "?": ["showHelp"],
 };
 
 async function performLoggedCommand(forward: Command) {
   const location = store.currentLocation;
 
-  const ctx = { store, setStatus, ask: chooser.value!.ask, viewTransition };
+  const ctx = { store, setStatus, ask: chooser.value!.ask, showHelp: helpDialog.value!.show, viewTransition };
   const reverse = await invokeCommand(ctx, forward);
 
   if (reverse) {
@@ -183,6 +186,7 @@ onMounted(() => detailsElem.value!.focus());
     </div>
     <div v-if="status" class="status">{{ status }}</div>
     <ChooserDialog ref="chooser" />
+    <HelpDialog ref="helpDialog" />
   </main>
 </template>
 

@@ -18,6 +18,8 @@ export interface OperationContext {
     (title: string, labels: string[]): Promise<number | null>;
     <T>(title: string, labels: string[], values: T[]): Promise<T | null>;
   };
+  // Show help dialog.
+  showHelp: () => void;
   // Perform document.startViewTransition().
   viewTransition: <T>(fn: () => T) => Promise<T>;
 }
@@ -275,6 +277,9 @@ const opsByName = {
 
   nameActivePile,
   goToChosenPile,
+  showHelp: (ctx: OperationContext): undefined => {
+    ctx.showHelp();
+  },
 
   swapPiles,
   swapActivePileUp: (ctx: OperationContext) =>
