@@ -10,7 +10,7 @@ export type Command = {
 
 type CardsStore = ReturnType<typeof useCardsStore>;
 
-interface OperationContext {
+export interface OperationContext {
   store: CardsStore;
   setStatus: (msg: string, options?: { transient?: boolean }) => void;
   // Ask for a choice, as through ChooserDialog.
@@ -19,11 +19,20 @@ interface OperationContext {
     <T>(title: string, labels: string[], values: T[]): Promise<T | null>;
   };
   // Perform document.startViewTransition().
-  viewTransition: (fn: () => void) => Promise<void>;
+  viewTransition: <T>(fn: () => T) => Promise<T>;
 }
 
 function pickCardClamped(pile: Pile, cardIndex: number): undefined {
   pile.pickedCardIndex = Math.max(0, Math.min(cardIndex, pile.cards.length - 1));
+}
+
+async function insertDelta(pile: Pile, card: Card | null, position: number, oldPosition?: number) {
+  if (pile.deckId == null || pile.revisionId == null) return;
+  const body = { position, oldPosition, cardId: card?.id };
+  await $fetch(`/api/decks/${pile.deckId}/revisions/${pile.revisionId}/deltas`, {
+    method: "POST",
+    body,
+  });
 }
 
 async function placeCardInto(
@@ -43,7 +52,7 @@ async function placeCardInto(
 
   const originalTargetPicked = targetPile.pickedCardIndex;
 
-  await ctx.viewTransition(() => {
+  const card = await ctx.viewTransition(() => {
     const card = sourcePile.cards.splice(sourceCardIndex, 1)[0];
     assert(card);
     if (restorePicked !== undefined) {
@@ -59,7 +68,16 @@ async function placeCardInto(
     // While our caller could arrange for this update, it would happen after
     // the view transition. To avoid artifacts, we push it down here.
     if (followTarget) [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = target;
+
+    return card;
   });
+
+  if (sourcePile !== targetPile) {
+    await insertDelta(sourcePile, null, sourceCardIndex);
+    await insertDelta(targetPile, card, targetCardIndex);
+  } else {
+    await insertDelta(targetPile, card, targetCardIndex, sourceCardIndex);
+  }
 
   const reverseOptions = { source: target, followTarget, restorePicked: originalTargetPicked };
   return ["placeCardInto", source, reverseOptions];
@@ -130,6 +148,31 @@ function swapPiles(
   if (aPileIndex < PILE_START || bPileIndex < PILE_START || !aPile || !bPile) return;
   [ctx.store.piles[aPileIndex], ctx.store.piles[bPileIndex]] = [bPile, aPile];
   return ["swapPiles", aPileIndex, bPileIndex];
+}
+
+async function loadPileFromDeckRevision(
+  ctx: OperationContext,
+  pileIndex: number,
+  revisionId?: number,
+): Promise<Command | undefined> {
+  const pile = ctx.store.piles[pileIndex];
+  if (pile?.deckId == null) return;
+
+  const oldRevision = await $fetch(`/api/decks/${pile.deckId}/revisions`, {
+    method: "POST",
+    body: { hidden: true, card_ids: pile.cards.map((card) => card.id) },
+  });
+
+  const revision = await $fetch(`/api/decks/${pile.deckId}/revisions/${revisionId ?? "latest"}`);
+  pile.revisionId = revision.id;
+  pile.cards = revision.cards.map((card) => ({
+    id: card.id,
+    url: card.url ?? "",
+    title: card.title ?? "(unknown)",
+    numTiles: card.numTiles,
+  }));
+
+  return ["loadPileFromDeckRevision", pileIndex, oldRevision.id];
 }
 
 function serializeCard(card: Card) {
@@ -238,6 +281,10 @@ const opsByName = {
     swapPiles(ctx, ctx.store.activePileIndex, ctx.store.decrementActivePileIndex()),
   swapActivePileDown: (ctx: OperationContext) =>
     swapPiles(ctx, ctx.store.activePileIndex, ctx.store.incrementActivePileIndex()),
+
+  loadPileFromDeckRevision,
+  refreshActivePile: (ctx: OperationContext) =>
+    loadPileFromDeckRevision(ctx, ctx.store.activePileIndex),
 
   takeSnapshot,
   restoreSnapshot,

@@ -16,8 +16,25 @@ watch(
   },
 );
 
-const { data: deckData, pending, error } = useLazyFetch("/api/deck");
-whenever(deckData, (deck) => (store.piles[1]!.cards = deck));
+// TODO initialization is not safe with concurrent user actions
+const { data: decksData, pending, error } = useLazyFetch("/api/decks");
+whenever(decksData, async (decks) => {
+  const piles = decks.map((deck) => ({
+    name: `Deck ${deck.id}`,
+    cards: [],
+    pickedCardIndex: 0,
+    deckId: deck.id,
+    revisionId: null,
+  }));
+
+  store.piles.splice(1, 0, ...piles);
+
+  await Promise.all(
+    store.piles.entries().map(async ([i, pile]) => {
+      if (pile.deckId) await invokeCommand(ctx.value, ["loadPileFromDeckRevision", i]);
+    }),
+  );
+});
 
 const status = ref("");
 let statusTimer: ReturnType<typeof setTimeout> | null = null;
@@ -40,16 +57,25 @@ function setStatus(msg: string, options: { transient?: boolean } = {}) {
   }
 }
 
-async function viewTransition(fn: () => void): Promise<void> {
+async function viewTransition<T>(fn: () => T): Promise<T> {
   if (!document.startViewTransition) {
-    fn();
+    return fn();
   } else {
-    return document.startViewTransition(() => {
-      fn();
+    let result: T;
+    await document.startViewTransition(() => {
+      result = fn();
       return nextTick();
     }).updateCallbackDone;
+    return result!;
   }
 }
+
+const ctx = computed<OperationContext>(() => ({
+  store,
+  setStatus,
+  ask: chooser.value!.ask,
+  viewTransition,
+}));
 
 const rootKeyBindings: Readonly<Record<string, Command>> = {
   h: ["pickCardLeft"],
@@ -85,6 +111,7 @@ const rootKeyBindings: Readonly<Record<string, Command>> = {
   n: ["nameActivePile"],
   g: ["goToChosenPile"],
   R: ["reverseCardsInPile"],
+  r: ["refreshActivePile"],
 
   s: ["takeSnapshot"],
   S: ["restoreSnapshot"],
