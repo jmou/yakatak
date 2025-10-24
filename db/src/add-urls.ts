@@ -1,12 +1,9 @@
-import Database from "better-sqlite3";
-import { ensureDatabaseSchema } from "./index.ts";
+import { YakatakDb } from "./index.ts";
 
 const stdin = await new Promise<string>((resolve) => {
   const chunks: Buffer[] = [];
   process.stdin.on("data", (chunk) => chunks.push(chunk));
-  process.stdin.on("end", () =>
-    resolve(Buffer.concat(chunks).toString("utf-8"))
-  );
+  process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
 });
 
 async function main() {
@@ -16,19 +13,18 @@ async function main() {
     process.exit(1);
   }
 
-  const db = new Database(dbPath);
-  await ensureDatabaseSchema(db);
+  const db = new YakatakDb(dbPath);
+  await db.init();
 
-  const stmt = db.prepare<[string], void>(`
-    INSERT INTO collect_job (source)
-    VALUES (jsonb(?))
-    ON CONFLICT(source) DO NOTHING
-  `);
-
+  const cardIds: number[] = [];
   for (const url of stdin.split("\n").filter(Boolean)) {
-    const source = { type: "url", url };
-    stmt.run(JSON.stringify(source));
+    const cardId = db.enqueueCard(url);
+    cardIds.push(cardId);
   }
+
+  const deck = db.createDeck();
+  const revision = db.createRevision(deck.id, cardIds, false);
+  console.log(`Created deck ${deck.id} revision ${revision.id}`);
 
   db.close();
 }

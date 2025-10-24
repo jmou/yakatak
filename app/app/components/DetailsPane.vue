@@ -12,7 +12,7 @@ const elem = defineModel<HTMLElement>("elem");
 <template>
   <div ref="elem" class="details">
     <div class="spacer"></div>
-    <div v-if="pending" class="pending">Loading deck...</div>
+    <div v-if="pending" class="pending">Loading cards...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <iframe v-else-if="card && iframe" :src="card.url"></iframe>
     <template v-else-if="card">
