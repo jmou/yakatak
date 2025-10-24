@@ -14,7 +14,8 @@ const imgSrc = computed(() => (card ? `/api/scrapes/${card.id}/thumb` : undefine
 
 const style = computed(() => {
   if (!card) return undefined;
-  return { viewTransitionName: `card-${card.id.replace(".", "_")}` };
+  // TODO handle (or disallow) duplicate cards
+  return { viewTransitionName: `card-${card.id}` };
 });
 </script>
 

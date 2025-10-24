@@ -1,5 +1,5 @@
 export interface Card {
-  readonly id: string;
+  readonly id: number;
   readonly url: string;
   readonly title: string;
   readonly numTiles: number;
@@ -10,6 +10,8 @@ export interface Pile {
   name: string;
   cards: Card[];
   pickedCardIndex: number;
+  deckId?: number;
+  revisionId?: number | null;
 }
 
 export interface Snapshot {

@@ -71,9 +71,10 @@ class ScrapeRecorder {
       jobs.map(async (job) => {
         const timestamp = new Date().toISOString();
         const dir = path.join(this.stateDir, "" + job.id);
-        const url = job.source.url;
 
-        const { title, screenshotPath, harPath } = await this.scrape(url, dir);
+        if (!job.url) throw new Error(`Card ${job.cardId} has no URL`);
+
+        const { title, screenshotPath, harPath } = await this.scrape(job.url, dir);
 
         const metadata = {
           crawled_at: timestamp,
@@ -81,18 +82,10 @@ class ScrapeRecorder {
         };
 
         // TODO remove compatibility output
-        await fs.writeFile(`${dir}/meta.json`, JSON.stringify({ url }));
+        await fs.writeFile(`${dir}/meta.json`, JSON.stringify({ url: job.url }));
 
-        this.db.completeCollectJob(
-          job.id,
-          job.source,
-          url,
-          title,
-          screenshotPath,
-          harPath,
-          metadata
-        );
-      })
+        this.db.completeCollectJob(job.id, title, screenshotPath, harPath, metadata);
+      }),
     )) {
       if (outcome.status === "rejected") {
         console.error(`Failed to scrape: ${outcome.reason}`);
@@ -105,9 +98,7 @@ class ScrapeRecorder {
 async function main() {
   const [, scriptPath, dbPath, stateDir, ...extraArgs] = process.argv;
   if (!dbPath || !stateDir || extraArgs.length > 0) {
-    console.error(
-      `Usage: node ${scriptPath} <database-path> <state-directory>`
-    );
+    console.error(`Usage: node ${scriptPath} <database-path> <state-directory>`);
     process.exit(1);
   }
 

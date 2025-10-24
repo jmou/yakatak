@@ -59,11 +59,11 @@ CREATE TABLE crawl (
 
 CREATE TABLE collect_job (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  -- e.g., jsonb('{"type": "url", "url": "http://example.com/"}')
-  source BLOB NOT NULL UNIQUE,
+  card_id INTEGER NOT NULL UNIQUE,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   claimed_at TEXT,
-  claimed_by TEXT
+  claimed_by TEXT,
+  FOREIGN KEY(card_id) REFERENCES card(id) ON DELETE RESTRICT
 );
 
 CREATE INDEX idx_collect_job_claimed_at ON collect_job(claimed_at) WHERE claimed_at IS NULL;
@@ -87,3 +87,32 @@ CREATE TABLE snapshot (
 );
 
 CREATE INDEX idx_snapshot_created_at ON snapshot(created_at DESC);
+
+CREATE TABLE deck (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE revision (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  deck_id INTEGER NOT NULL,
+  -- e.g., jsonb('[1, 2, 3]')
+  card_ids BLOB NOT NULL,
+  hidden NUMBER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(deck_id) REFERENCES deck(id) ON DELETE CASCADE
+);
+
+-- insert: card_id IS NOT NULL AND old_position IS NULL
+-- move/replace: card_id IS NOT NULL AND old_position IS NOT NULL
+-- delete: card_id IS NULL
+CREATE TABLE delta (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  revision_id INTEGER NOT NULL,
+  position INTEGER NOT NULL,
+  old_position INTEGER,
+  card_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(revision_id) REFERENCES revision(id) ON DELETE CASCADE,
+  FOREIGN KEY(card_id) REFERENCES card(id) ON DELETE RESTRICT
+);
