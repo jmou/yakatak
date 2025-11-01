@@ -14,7 +14,6 @@ const elem = defineModel<HTMLElement>("elem");
     <div v-if="pending" class="pending">Loading deck...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <template v-else-if="card">
-      <div class="meta">{{ card.title }}<br />{{ card.url }}</div>
       <img
         v-for="tileIndex in Array.from({ length: card.numTiles }, (_, i) => i)"
         :key="tileIndex"
@@ -45,18 +44,6 @@ const elem = defineModel<HTMLElement>("elem");
   > .spacer {
     width: 1024px;
     height: 0;
-  }
-
-  > .meta {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    padding: 2px;
-    border-top-right-radius: 8px;
-    background: #eee;
-    &:hover {
-      opacity: 0.3;
-    }
   }
 
   > img {

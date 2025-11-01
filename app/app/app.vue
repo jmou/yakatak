@@ -129,20 +129,23 @@ onMounted(() => detailsElem.value!.focus());
 
 <template>
   <main>
-    <DetailsPane
-      v-model:elem="detailsElem"
-      :pending
-      :error
-      :card="store.pickedCard"
-      tabindex="0"
-      @keydown="onKeydown"
-    />
-    <PilesPane
-      v-model:active="store.activePileIndex"
-      :piles="store.piles"
-      tabindex="-1"
-      @focus="detailsElem!.focus()"
-    />
+    <TitleBar :card="store.pickedCard" />
+    <div class="panes">
+      <DetailsPane
+        v-model:elem="detailsElem"
+        :pending
+        :error
+        :card="store.pickedCard"
+        tabindex="0"
+        @keydown="onKeydown"
+      />
+      <PilesPane
+        v-model:active="store.activePileIndex"
+        :piles="store.piles"
+        tabindex="-1"
+        @focus="detailsElem!.focus()"
+      />
+    </div>
     <div v-if="status" class="status">{{ status }}</div>
     <ChooserDialog ref="chooser" />
   </main>
@@ -151,7 +154,14 @@ onMounted(() => detailsElem.value!.focus());
 <style scoped>
 main {
   display: flex;
+  flex-direction: column;
   height: 100vh;
+}
+
+.panes {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 .status {
@@ -176,7 +186,7 @@ body {
 
 :root {
   font-family: system-ui, Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 14px;
   background: #eee;
 }
 </style>
