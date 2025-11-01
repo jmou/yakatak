@@ -85,6 +85,10 @@ const carouselStyle = computed(() => ({
   scroll-padding: calc(var(--gutter-width) + 5px);
   scrollbar-width: none;
 
+  /* Make a view transition group to contain cards. */
+  view-transition-name: match-element;
+  view-transition-class: carousel;
+
   > * {
     flex: none;
     width: var(--card-width);
@@ -107,6 +111,9 @@ const carouselStyle = computed(() => ({
     --margin-adjustment: calc(-1 * (var(--scroll-shadow-width) + var(--gap)));
     z-index: 2;
     pointer-events: none;
+
+    /* Render shadow above cards during view transition. */
+    view-transition-name: match-element;
 
     animation-name: reveal, detect-scroll;
     animation-timeline: scroll(x);
@@ -151,5 +158,12 @@ const carouselStyle = computed(() => ({
   to {
     --can-scroll: ;
   }
+}
+</style>
+
+<style>
+/* Prevent view transition children from painting outside the carousel. */
+::view-transition-group-children(.carousel) {
+  overflow: clip;
 }
 </style>

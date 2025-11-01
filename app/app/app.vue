@@ -180,3 +180,10 @@ body {
   background: #eee;
 }
 </style>
+
+<style>
+/* Transition unnamed elements (like the details pane) instantly. */
+::view-transition-group(root) {
+  animation: none;
+}
+</style>

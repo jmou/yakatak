@@ -34,7 +34,6 @@ const elem = defineModel<HTMLElement>("elem");
   overflow: auto;
   scrollbar-gutter: stable;
   scrollbar-color: #666 #eee;
-  view-transition-name: details;
 
   /* We programatically focus the details pane, but don't emphasize it. */
   &:focus-visible {

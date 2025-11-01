@@ -44,10 +44,16 @@ const style = computed(() => {
 
   transition: transform 0.15s ease;
   view-transition-class: card;
+  /* CSS View Transitions Module Level 2 is not yet standardized, but nested
+  view transition groups are implemented in Chrome. */
+  view-transition-group: nearest;
 
   &.picked {
     border-color: #666;
     opacity: 1;
+    /* Do not parent (nor clip) to the carousel, since the picked card may be
+    moving between piles. */
+    view-transition-group: normal;
   }
 
   --peek-height: 2px;
@@ -77,17 +83,6 @@ const style = computed(() => {
 </style>
 
 <style>
-::view-transition-group(root) {
-  animation-duration: 0s;
-}
-
-/* Workaround to prevent cards from painting over the details pane; not an
-   actual transition. */
-::view-transition-group(details) {
-  animation-duration: 0s;
-  z-index: 1;
-}
-
 @keyframes slide-up {
   to {
     opacity: 0;
