@@ -40,6 +40,18 @@ function onClickLabel(event: PointerEvent) {
   elem.value!.close();
 }
 
+function onKeyDown(event: KeyboardEvent) {
+  if (event.key === "j") {
+    state.selectedIndex =
+      state.selectedIndex + 1 < state.labels.length ? state.selectedIndex + 1 : 0;
+    event.preventDefault();
+  } else if (event.key === "k") {
+    state.selectedIndex =
+      state.selectedIndex > 0 ? state.selectedIndex - 1 : Math.max(0, state.labels.length - 1);
+    event.preventDefault();
+  }
+}
+
 /**
  * Present to the user a dialog for choosing among the provided labels.
  * @param title Dialog title
@@ -74,7 +86,7 @@ defineExpose({ ask });
 </script>
 
 <template>
-  <dialog ref="elem" closedby="any">
+  <dialog ref="elem" closedby="any" @keydown="onKeyDown">
     <header>{{ state.title }}</header>
     <form method="dialog">
       <label v-for="(label, i) in state.labels" :key="i" @click="onClickLabel">
