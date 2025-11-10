@@ -215,6 +215,10 @@ const opsByName = {
     if (ctx.store.pickedCard) open(ctx.store.pickedCard.url);
   },
 
+  toggleIframeDetails: (ctx: OperationContext): undefined => {
+    ctx.store.iframeDetails = !ctx.store.iframeDetails;
+  },
+
   reverseCardsInPile,
 
   activatePileUp: (ctx: OperationContext) => void ctx.store.decrementActivePileIndex(),

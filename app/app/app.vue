@@ -72,6 +72,7 @@ const rootKeyBindings: Readonly<Record<string, Command>> = {
   "0": ["movePickedCardToPile", 10],
 
   Enter: ["openPickedCardPage"],
+  i: ["toggleIframeDetails"],
   d: ["discardPickedCard"],
 
   o: ["createPileDown"],
@@ -136,6 +137,7 @@ onMounted(() => detailsElem.value!.focus());
         :pending
         :error
         :card="store.pickedCard"
+        :iframe="store.iframeDetails"
         tabindex="0"
         @keydown="onKeydown"
       />

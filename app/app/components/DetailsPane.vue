@@ -3,6 +3,7 @@ defineProps<{
   pending: boolean;
   error: Error | undefined;
   card: Card | undefined;
+  iframe: boolean;
 }>();
 
 const elem = defineModel<HTMLElement>("elem");
@@ -13,6 +14,7 @@ const elem = defineModel<HTMLElement>("elem");
     <div class="spacer"></div>
     <div v-if="pending" class="pending">Loading deck...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
+    <iframe v-else-if="card && iframe" :src="card.url"></iframe>
     <template v-else-if="card">
       <img
         v-for="tileIndex in Array.from({ length: card.numTiles }, (_, i) => i)"
@@ -53,6 +55,12 @@ const elem = defineModel<HTMLElement>("elem");
     &:last-child {
       height: auto;
     }
+  }
+
+  > iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
   }
 }
 
