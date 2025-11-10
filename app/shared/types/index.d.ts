@@ -3,6 +3,7 @@ export interface Card {
   readonly url: string;
   readonly title: string;
   readonly numTiles: number;
+  scrollY?: number;
 }
 
 export interface Pile {

@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { whenever } from "@vueuse/core";
+import { whenever, useScroll } from "@vueuse/core";
 
 const store = useCardsStore();
 
 const chooser = useTemplateRef("chooser");
 const detailsElem = ref<HTMLElement>();
 
+const { y: scrollY } = useScroll(detailsElem);
+
 watch(
   () => store.pickedCard,
-  () => (detailsElem.value!.scrollTop = 0),
+  (newCard, oldCard) => {
+    if (oldCard) oldCard.scrollY = scrollY.value;
+    nextTick(() => (scrollY.value = newCard?.scrollY ?? 0));
+  },
 );
 
 const { data: deckData, pending, error } = useLazyFetch("/api/deck");
