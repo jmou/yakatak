@@ -279,29 +279,40 @@ export class YakatakDb {
     stmt.run(revisionId, position, oldPosition, cardId);
   }
 
-  getDeltas(deckId: number, revisionId: number, sinceDeltaId: number) {
+  getDeltas(decks: { deckId: number; revisionId: number }[], sinceDeltaId: number) {
     const stmt = this.db.prepare<
-      [number, number, number],
+      [string, number],
       {
         id: number;
+        deck_id: number;
+        revision_id: number;
         position: number;
         old_position: number | null;
         url: string | null;
       }
     >(`
-      SELECT delta.id, delta.position, delta.old_position, card.url
+      SELECT
+        delta.id,
+        deck.id AS deck_id,
+        revision.id AS revision_id,
+        delta.position,
+        delta.old_position,
+        card.url
       FROM delta
       JOIN revision ON revision.id = delta.revision_id
       JOIN deck ON deck.id = revision.deck_id
+      JOIN json_each(?) j
+        ON deck.id = json_extract(j.value, '$.deckId')
+        AND revision.id = json_extract(j.value, '$.revisionId')
       LEFT JOIN card ON card.id = delta.card_id
-      WHERE deck.id = ?
-      AND revision.id = ?
-      AND delta.id >= ?
+      WHERE delta.id >= ?
       ORDER BY delta.id
       `);
 
-    return stmt.all(deckId, revisionId, sinceDeltaId).map((row) => ({
+    return stmt.all(JSON.stringify(decks), sinceDeltaId).map((row) => ({
       id: row.id,
+      deckId: row.deck_id,
+      revisionId: row.revision_id,
       position: row.position,
       oldPosition: row.old_position,
       url: row.url,

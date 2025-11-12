@@ -22,8 +22,9 @@ export interface OperationContext {
 
 async function pushDelta(pile: Pile, card: Card | null, position: number, oldPosition?: number) {
   if (pile.deckId == null || pile.revisionId == null) return;
-  const body = { position, oldPosition, cardId: card?.id };
-  await $fetch(`/api/decks/${pile.deckId}/revisions/${pile.revisionId}/deltas`, {
+  const { deckId, revisionId } = pile;
+  const body = { deckId, revisionId, position, oldPosition, cardId: card?.id };
+  await $fetch(`/api/deltas`, {
     method: "POST",
     body,
   });

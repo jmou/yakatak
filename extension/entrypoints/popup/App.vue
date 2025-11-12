@@ -6,30 +6,55 @@ const { state: activeWindowId } = useAsyncState(async () => {
   return tab?.windowId;
 }, undefined);
 
-const { state: windows, executeImmediate } = useAsyncState(() => sendMessage("queryWindows"), []);
+const { state: syncedWindowIds, executeImmediate: refreshWindowIds } = useAsyncState(async () => {
+  const keys = await browser.storage.session.getKeys();
+  return keys
+    .filter((key) => key.startsWith("window-"))
+    .map((key) => parseInt(key.replace("window-", ""), 10));
+}, []);
 
-const activeWindow = computed(() => windows.value.find(({ id }) => id === activeWindowId.value));
+const { state: dirtyWindowIds, executeImmediate: refreshDirtyWindowIds } =
+  useAsyncState(async () => {
+    const alarms = await browser.alarms.getAll();
+    return alarms
+      .filter((alarm) => alarm.name.startsWith("save-revision-"))
+      .map((alarm) => parseInt(alarm.name.replace("save-revision-", ""), 10));
+  }, []);
 
-onMessage("windowUpdated", () => {
-  executeImmediate();
-});
+const windows = computed(() =>
+  syncedWindowIds.value.map((id) => ({
+    id,
+    dirty: dirtyWindowIds.value.includes(id),
+  })),
+);
+
+const { state: connected } = useAsyncState(() => sendMessage("getConnectionStatus"), false);
+
+browser.storage.session.onChanged.addListener(refreshWindowIds);
+browser.alarms.onAlarm.addListener(refreshDirtyWindowIds);
+
+function enableSync(windowId: number) {
+  browser.storage.session.set({ [`window-${windowId}`]: {} });
+}
+
+function disableSync(windowId: number) {
+  browser.storage.session.remove(`window-${windowId}`);
+}
 </script>
 
 <template>
-  <button v-if="activeWindow" @click="sendMessage('disableSyncForWindow', activeWindow.id)">
-    Disable Sync
-  </button>
-  <button
-    v-else-if="activeWindowId != null"
-    @click="sendMessage('enableSyncForWindow', activeWindowId)"
-  >
-    Enable Sync
-  </button>
+  <template v-if="activeWindowId != null">
+    <button v-if="syncedWindowIds.includes(activeWindowId)" @click="disableSync(activeWindowId)">
+      Disable Sync
+    </button>
+    <button v-else @click="enableSync(activeWindowId)">Enable Sync</button>
+  </template>
+  <div>{{ connected ? "🟢 Connected" : "🔴 Disconnected" }}</div>
   <ul>
     <li
       v-for="win in windows"
       :key="win.id"
-      :class="{ active: win.id === activeWindowId, connected: win.connected, dirty: win.dirty }"
+      :class="{ active: win.id === activeWindowId, dirty: win.dirty }"
     >
       Window {{ win.id }}
     </li>
@@ -71,15 +96,11 @@ li {
     font-weight: bold;
   }
 
-  &.connected::before {
-    content: "🟢 ";
+  &::before {
+    content: "🔄 ";
   }
-  &:not(.connected)::before {
-    content: "🔴 ";
-  }
-
-  &.dirty::after {
-    content: " 🔄";
+  &:not(.dirty)::before {
+    visibility: hidden;
   }
 }
 </style>

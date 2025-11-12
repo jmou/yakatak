@@ -1,11 +1,76 @@
-interface WindowState {
-  deckId: number;
-  dirty: Ref<boolean>;
-  deltas: Ref<DeltaEvent[]>;
-  disconnect: Ref<(() => void) | undefined>;
+interface AddWindowEvent {
+  type: "add window";
+  windowId: number;
 }
 
-const windows = new Map<number, WindowState>();
+interface RemoveWindowEvent {
+  type: "remove window";
+  windowId: number;
+}
+
+interface DirtyWindowEvent {
+  type: "dirty window";
+  windowId: number;
+}
+
+interface ReconnectEvent {
+  type: "reconnect";
+}
+
+interface SaveRevisionEvent {
+  type: "save revision";
+  windowId: number;
+}
+
+interface DeltaEventEvent {
+  type: "delta event";
+  delta: DeltaEvent;
+}
+
+interface ConnectionStatusEvent {
+  type: "connection status";
+  resolve: (value: boolean) => void;
+}
+
+type QueueableEvent =
+  | AddWindowEvent
+  | RemoveWindowEvent
+  | DirtyWindowEvent
+  | ReconnectEvent
+  | SaveRevisionEvent
+  | DeltaEventEvent
+  | ConnectionStatusEvent;
+
+class EventQueue {
+  private queue: QueueableEvent[] = [];
+  private resolve: ((value: QueueableEvent) => void) | null = null;
+
+  push(event: QueueableEvent) {
+    if (this.resolve) {
+      this.resolve(event);
+      this.resolve = null;
+    } else {
+      this.queue.push(event);
+    }
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<QueueableEvent, never, unknown> {
+    while (true) {
+      yield await new Promise<QueueableEvent>((resolve) => (this.resolve = resolve));
+      yield* this.queue;
+      this.queue = [];
+    }
+  }
+}
+
+interface WindowState {
+  deckId?: number;
+}
+
+interface DeckState {
+  windowId: number;
+  revisionId: number;
+}
 
 async function getWindowTabs(windowId: number) {
   const tabs = await browser.tabs.query({ windowId });
@@ -20,62 +85,12 @@ async function saveWindowRevision(windowId: number, deckId: number) {
   return result;
 }
 
-function scheduleSaveRevision(windowId: number) {
-  const win = windows.get(windowId);
-  if (win) win.dirty.value = true;
-}
+async function handleDeltaEvent(delta: DeltaEvent): Promise<void> {
+  const deck = await storage.getItem<DeckState>(`session:deck-${delta.deckId}`);
+  if (!deck) throw new Error(`Unknown deck ${delta.deckId}`);
+  if (delta.revisionId !== deck.revisionId) throw new Error(`Revision mismatch`);
+  const windowId = deck.windowId;
 
-async function enableSyncForWindow(windowId: number): Promise<void> {
-  const deck = await api.createDeck();
-
-  const dirty = ref(false);
-  const deltas = ref<DeltaEvent[]>([]);
-  const disconnect = ref<() => void>();
-  const win: WindowState = { deckId: deck.id, dirty, deltas, disconnect };
-  windows.set(windowId, win);
-
-  // FIXME popup may not exist
-  sendMessage("windowUpdated", windowId);
-  watch([dirty, disconnect], () => sendMessage("windowUpdated", windowId));
-
-  watchEffect(() => {
-    if (!dirty.value) return;
-    setTimeout(async () => {
-      dirty.value = false;
-      await saveWindowRevision(windowId, win.deckId);
-    }, 10_000);
-  });
-
-  let processing = false;
-  watch(
-    deltas,
-    async (deltas) => {
-      if (processing) return;
-      processing = true;
-      let delta;
-      while ((delta = deltas.shift())) {
-        try {
-          await handleDeltaEvent(windowId, delta);
-        } catch (err) {
-          if (disconnect.value) {
-            disconnect.value();
-            disconnect.value = undefined;
-          }
-          throw err;
-        }
-      }
-      processing = false;
-    },
-    { deep: true },
-  );
-
-  const revision = await saveWindowRevision(windowId, deck.id);
-
-  // TODO it seems like listening for deltas should not need saving a revision
-  disconnect.value = api.listenForDeltas(deck.id, revision.id, (delta) => deltas.value.push(delta));
-}
-
-async function handleDeltaEvent(windowId: number, delta: DeltaEvent): Promise<void> {
   if (delta.type === "insert") {
     await browser.tabs.create({
       windowId,
@@ -100,41 +115,121 @@ async function handleDeltaEvent(windowId: number, delta: DeltaEvent): Promise<vo
   }
 }
 
-function handleWindowMutated(windowId: number) {
-  scheduleSaveRevision(windowId);
-}
+async function processEvents(events: EventQueue) {
+  let disconnect: (() => void) | null = null;
 
-function removeWindow(windowId: number) {
-  const win = windows.get(windowId);
-  if (!win?.disconnect?.value) return;
-  win.disconnect.value();
-  windows.delete(windowId);
-  sendMessage("windowUpdated", windowId);
-}
+  for await (const event of events) {
+    console.debug("Processing event", event);
+    if (event.type === "add window") {
+      const { id: deckId } = await api.createDeck();
+      const { id: revisionId } = await saveWindowRevision(event.windowId, deckId);
 
-function queryWindows() {
-  return [...windows.entries()].map(([id, win]) => ({
-    id,
-    connected: win.disconnect.value != null,
-    dirty: win.dirty.value,
-  }));
+      const win: WindowState = { deckId: deckId };
+      await browser.storage.session.set({ [`window-${event.windowId}`]: win });
+      const deck: DeckState = { revisionId, windowId: event.windowId };
+      await browser.storage.session.set({ [`deck-${deckId}`]: deck });
+    } else if (event.type === "remove window") {
+      await browser.alarms.clear(`save-revision-${event.windowId}`);
+      const win = await storage.getItem<WindowState>(`session:window-${event.windowId}`);
+      if (!win) throw new Error("Window not present");
+      await browser.storage.session.remove(`window-${event.windowId}`);
+      if (win.deckId != null) {
+        await browser.storage.session.remove(`deck-${win.deckId}`);
+      }
+    } else if (event.type === "dirty window") {
+      const win = await storage.getItem<WindowState>(`session:window-${event.windowId}`);
+      if (!win) continue;
+      const name = `save-revision-${event.windowId}`;
+      const existing = await browser.alarms.get(name);
+      if (!existing) await browser.alarms.create(name, { delayInMinutes: 0.5 });
+    } else if (event.type === "reconnect") {
+      const keys = await browser.storage.session.getKeys();
+      const deckKeys = keys.filter((k) => k.startsWith("deck-"));
+      const decks = await browser.storage.session.get(deckKeys);
+      const deckRevisions = Object.entries(decks).map(([key, { revisionId }]) => ({
+        deckId: parseInt(key.replace("deck-", ""), 10),
+        revisionId,
+      }));
+
+      if (disconnect) {
+        disconnect();
+        disconnect = null;
+      }
+      if (deckRevisions.length === 0) continue;
+
+      disconnect = api.listenForDeltas(deckRevisions, (delta) =>
+        events.push({ type: "delta event", delta }),
+      );
+    } else if (event.type === "save revision") {
+      const win = await storage.getItem<WindowState>(`session:window-${event.windowId}`);
+      if (win?.deckId == null) throw new Error("Cannot save unknown deck");
+      await saveWindowRevision(event.windowId, win.deckId);
+    } else if (event.type === "delta event") {
+      await handleDeltaEvent(event.delta);
+    } else if (event.type === "connection status") {
+      event.resolve(disconnect != null);
+    } else {
+      const _: never = event;
+      throw new Error("Unhandled event");
+    }
+  }
 }
 
 export default defineBackground({
   type: "module",
+  persistent: false,
   main() {
-    browser.tabs.onCreated.addListener((tab) => handleWindowMutated(tab.windowId));
-    browser.tabs.onRemoved.addListener((_tabId, { windowId }) => handleWindowMutated(windowId));
+    const events = new EventQueue();
+
+    browser.tabs.onCreated.addListener((tab) =>
+      events.push({ type: "dirty window", windowId: tab.windowId }),
+    );
+    browser.tabs.onRemoved.addListener((_tabId, { windowId }) =>
+      events.push({ type: "dirty window", windowId }),
+    );
     browser.tabs.onUpdated.addListener((_tabId, _changeInfo, tab) =>
-      handleWindowMutated(tab.windowId),
+      events.push({ type: "dirty window", windowId: tab.windowId }),
     );
     // TODO how are cross-window moves represented?
-    browser.tabs.onMoved.addListener((_tabId, { windowId }) => handleWindowMutated(windowId));
+    browser.tabs.onMoved.addListener((_tabId, { windowId }) =>
+      events.push({ type: "dirty window", windowId }),
+    );
 
-    browser.windows.onRemoved.addListener(removeWindow);
+    browser.windows.onRemoved.addListener((windowId) =>
+      events.push({ type: "remove window", windowId }),
+    );
 
-    onMessage("enableSyncForWindow", ({ data: windowId }) => enableSyncForWindow(windowId));
-    onMessage("disableSyncForWindow", ({ data: windowId }) => removeWindow(windowId));
-    onMessage("queryWindows", queryWindows);
+    browser.storage.session.onChanged.addListener((changes) => {
+      let reconnect = false;
+      for (const [key, { oldValue, newValue }] of Object.entries(changes)) {
+        if (key.startsWith("window-")) {
+          const windowId = parseInt(key.replace("window-", ""), 10);
+          if (oldValue == null) {
+            events.push({ type: "add window", windowId });
+          } else if (newValue == null) {
+            events.push({ type: "remove window", windowId });
+          }
+          reconnect = true;
+        }
+      }
+      if (reconnect) events.push({ type: "reconnect" });
+    });
+
+    browser.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name.startsWith("save-revision-")) {
+        const windowId = parseInt(alarm.name.replace("save-revision-", ""), 10);
+        events.push({ type: "save revision", windowId });
+      }
+    });
+
+    browser.runtime.onSuspend.addListener(() => console.log("Suspending"));
+
+    onMessage(
+      "getConnectionStatus",
+      () => new Promise((resolve) => events.push({ type: "connection status", resolve })),
+    );
+
+    events.push({ type: "reconnect" });
+    processEvents(events);
   },
 });

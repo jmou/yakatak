@@ -1,5 +1,7 @@
 export interface DeltaEvent {
   id: number;
+  deckId: number;
+  revisionId: number;
   type: "insert" | "delete" | "move";
   position: number;
   oldPosition?: number;
@@ -31,15 +33,15 @@ class Api {
   }
 
   listenForDeltas(
-    deckId: number,
-    revisionId: number,
+    decks: { deckId: number; revisionId: number }[],
     onDelta: (delta: DeltaEvent) => void,
   ): () => void {
-    const url = `${this.apiBase}/api/decks/${deckId}/revisions/${revisionId}/deltas`;
+    const query = decks.map((d) => `${d.deckId}@${d.revisionId}`).join(",");
+    const url = `${this.apiBase}/api/deltas?decks=${query}`;
     const events = new EventSource(url, { withCredentials: true });
-    events.onopen = () => console.info(`Listening for deltas on deck ${deckId}`);
+    events.onopen = () => console.info(`Listening for deltas on decks ${query}`);
     events.onmessage = (event) => onDelta(JSON.parse(event.data) as DeltaEvent);
-    events.onerror = () => console.error(`SSE error for deltas on deck ${deckId}`);
+    events.onerror = () => console.error(`SSE error for deltas on decks ${query}`);
     return () => events.close();
   }
 }
