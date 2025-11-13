@@ -105,6 +105,16 @@ export class YakatakDb {
     return row ? { id: row.id, cardId: row.card_id, url: row.url } : undefined;
   }
 
+  unclaimCollectJob(collectJobId: number): void {
+    const stmt = this.db.prepare<[number], void>(`
+      UPDATE collect_job
+      SET claimed_at = NULL, claimed_by = NULL
+      WHERE id = ?
+    `);
+
+    stmt.run(collectJobId);
+  }
+
   completeCollectJob(
     collectJobId: number,
     title: string | null,
