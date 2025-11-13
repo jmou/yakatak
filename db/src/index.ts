@@ -5,6 +5,7 @@ import path from "node:path";
 interface CollectJob {
   id: number;
   cardId: number;
+  domain: string;
   url: string | null;
 }
 
@@ -68,41 +69,90 @@ export class YakatakDb {
       RETURNING id
     `);
 
-    const insertCollectJobStmt = this.db.prepare<[number], void>(`
-      INSERT INTO collect_job (card_id)
-      VALUES (?)
+    const insertCollectJobStmt = this.db.prepare<[number, string], void>(`
+      INSERT INTO collect_job (card_id, domain)
+      VALUES (?, ?)
     `);
 
     const key = JSON.stringify({ type: "url", url });
+    const domain = new URL(url).hostname;
 
     const transaction = this.db.transaction(() => {
       const existingCard = selectStmt.get(key);
       if (existingCard) return existingCard.id;
 
       const card = insertCardStmt.get(key, url)!;
-      insertCollectJobStmt.run(card.id);
+      insertCollectJobStmt.run(card.id, domain);
       return card.id;
     });
 
     return transaction();
   }
 
-  claimCollectJob(claimedBy: string): CollectJob | undefined {
-    const stmt = this.db.prepare<[string], { id: number; card_id: number; url: string | null }>(`
+  expireDomainTokens(): void {
+    const stmt = this.db.prepare<[], void>(`
+      DELETE FROM domain_token_lease
+      WHERE leased_until <= datetime('now')
+    `);
+    stmt.run();
+  }
+
+  existsUnclaimedCollectJob(): boolean {
+    const stmt = this.db.prepare<[], { 1: number }>(`
+      SELECT 1
+      FROM collect_job
+      WHERE claimed_at IS NULL
+      LIMIT 1
+    `);
+    const row = stmt.get();
+    return row != null;
+  }
+
+  claimCollectJob(
+    claimedBy: string,
+    tokensPerDomain: number,
+    leaseDurationSec: number,
+  ): CollectJob | undefined {
+    const claimStmt = this.db.prepare<
+      [string, number],
+      { id: number; card_id: number; domain: string; url: string | null }
+    >(`
+      WITH used_tokens AS (
+        SELECT domain, COUNT(*) as count
+        FROM domain_token_lease
+        GROUP BY domain
+      )
       UPDATE collect_job
-      SET claimed_at = datetime('now'), claimed_by = ?
+      SET
+        claimed_by = ?,
+        claimed_at = datetime('now')
       WHERE id = (
-        SELECT id FROM collect_job
-        WHERE claimed_at IS NULL
-        ORDER BY created_at ASC
+        SELECT candidate.id
+        FROM collect_job candidate
+        LEFT JOIN used_tokens ON used_tokens.domain = candidate.domain
+        WHERE candidate.claimed_at IS NULL
+          AND COALESCE(used_tokens.count, 0) < ?
+        ORDER BY candidate.created_at ASC
         LIMIT 1
       )
-      RETURNING id, card_id, (SELECT url FROM card WHERE id = card_id) AS url
+      RETURNING id, card_id, domain, (SELECT url FROM card WHERE id = card_id) AS url
     `);
 
-    const row = stmt.get(claimedBy);
+    const leaseStmt = this.db.prepare<[string, number], void>(`
+      INSERT INTO domain_token_lease (domain, leased_until)
+      VALUES (?, datetime('now', '+' || ? || ' seconds'))
+    `);
 
-    return row ? { id: row.id, cardId: row.card_id, url: row.url } : undefined;
+    const transaction = this.db.transaction(() => {
+      const row = claimStmt.get(claimedBy, tokensPerDomain);
+      if (!row) return undefined;
+
+      leaseStmt.run(row.domain, leaseDurationSec);
+
+      return { id: row.id, cardId: row.card_id, domain: row.domain, url: row.url };
+    });
+
+    return transaction();
   }
 
   completeCollectJob(

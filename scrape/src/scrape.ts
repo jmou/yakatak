@@ -12,21 +12,28 @@ import * as playwright from "playwright";
 // - archive.org?
 // - WACZ (or WARC) would be more fit for purpose than HAR
 
+const MAX_CONCURRENT_JOBS = 5;
+const TOKENS_PER_DOMAIN = 2;
+const TOKEN_LEASE_DURATION_SEC = 5;
+const POLL_DELAY_MS = 1000;
+
 class ScrapeRecorder {
   private browser: Promise<playwright.Browser>;
   private stateDir: string;
   private db: YakatakDb;
   private workerId: string;
+  private active: Set<Promise<void>> = new Set();
+  public draining = false;
 
-  private constructor(dbPath: string, stateDir: string) {
-    this.stateDir = stateDir;
+  private constructor(dbPath: string) {
+    this.stateDir = path.resolve(path.dirname(dbPath), "scrape");
     this.db = new YakatakDb(dbPath);
     this.browser = playwright.chromium.launch();
     this.workerId = `scrape:${os.hostname()}:${process.pid}`;
   }
 
-  static async new(dbPath: string, stateDir: string) {
-    const recorder = new ScrapeRecorder(dbPath, stateDir);
+  static async new(dbPath: string) {
+    const recorder = new ScrapeRecorder(dbPath);
     await recorder.db.init();
     return recorder;
   }
@@ -58,17 +65,29 @@ class ScrapeRecorder {
     return { title, screenshotPath, harPath };
   }
 
-  // TODO poll with semaphore
-  async scrapeAll() {
-    const jobs = [];
-    while (true) {
-      const job = this.db.claimCollectJob(this.workerId);
-      if (!job) break;
-      jobs.push(job);
-    }
+  async run({ oneshot }: { oneshot: boolean }) {
+    console.info(`Starting scrape worker ${this.workerId}`);
 
-    for (const outcome of await Promise.allSettled(
-      jobs.map(async (job) => {
+    while (true) {
+      if (this.draining) break;
+      if (this.active.size === MAX_CONCURRENT_JOBS) {
+        await Promise.race(this.active);
+        continue;
+      }
+
+      this.db.expireDomainTokens();
+      const job = this.db.claimCollectJob(
+        this.workerId,
+        TOKENS_PER_DOMAIN,
+        TOKEN_LEASE_DURATION_SEC,
+      );
+      if (!job) {
+        if (oneshot && !this.db.existsUnclaimedCollectJob()) break;
+        await new Promise((resolve) => setTimeout(resolve, POLL_DELAY_MS));
+        continue;
+      }
+
+      const promise = (async () => {
         const timestamp = new Date().toISOString();
         const dir = path.join(this.stateDir, "" + job.id);
 
@@ -85,25 +104,42 @@ class ScrapeRecorder {
         await fs.writeFile(`${dir}/meta.json`, JSON.stringify({ url: job.url }));
 
         this.db.completeCollectJob(job.id, title, screenshotPath, harPath, metadata);
-      }),
-    )) {
-      if (outcome.status === "rejected") {
-        console.error(`Failed to scrape: ${outcome.reason}`);
-        process.exitCode = 1;
-      }
+      })();
+      promise
+        .catch((e) => {
+          console.error("Scrape failed:", e);
+          process.exitCode = 1;
+        })
+        .finally(() => this.active.delete(promise));
+      this.active.add(promise);
     }
+
+    await Promise.allSettled(this.active);
   }
 }
 
 async function main() {
-  const [, scriptPath, dbPath, stateDir, ...extraArgs] = process.argv;
-  if (!dbPath || !stateDir || extraArgs.length > 0) {
-    console.error(`Usage: node ${scriptPath} <database-path> <state-directory>`);
+  const [, scriptPath, mode, dbPath, ...extraArgs] = process.argv;
+  if ((mode !== "--oneshot" && mode !== "--daemon") || !dbPath || extraArgs.length > 0) {
+    console.error(`Usage: npx tsx ${scriptPath} (--oneshot|--daemon) <database-path>`);
     process.exit(1);
   }
 
-  await using recorder = await ScrapeRecorder.new(dbPath, stateDir);
-  await recorder.scrapeAll();
+  await using recorder = await ScrapeRecorder.new(dbPath);
+
+  function handleShutdown(signal: string) {
+    if (recorder.draining) {
+      console.info("Forcefully shutting down...");
+      process.exit(1);
+    }
+    console.info("Gracefully shutting down...");
+    recorder.draining = true;
+  }
+
+  process.on("SIGINT", () => handleShutdown("SIGINT"));
+  process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+
+  await recorder.run({ oneshot: mode === "--oneshot" });
 }
 
 await main();
