@@ -24,6 +24,13 @@ watchEffect(() => activeElem.value?.scrollIntoView({ block: "nearest" }));
       >
         <header>
           <span class="index">{{ pileIndex - PILE_START + 1 }}</span> {{ pile.name }}
+          <span
+            v-if="pile.deckId != null"
+            class="deck"
+            :class="{ dirty: pile.revisionId == null }"
+            :title="`Revision ${pile.revisionId}`"
+            >Deck {{ pile.deckId }}</span
+          >
         </header>
         <CardCarousel
           :pile
@@ -68,10 +75,25 @@ section {
   > header {
     margin: 5px;
     margin-bottom: 0;
+    cursor: default;
+
     > .index {
       font-weight: bold;
       &::after {
         content: ".";
+      }
+    }
+
+    > .deck {
+      font-style: italic;
+      &::before {
+        font-style: normal;
+        margin-left: 2ex;
+        margin-right: 0.3ex;
+        content: "✓";
+      }
+      &.dirty::before {
+        content: "🗘";
       }
     }
   }

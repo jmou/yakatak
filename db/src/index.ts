@@ -187,26 +187,21 @@ export class YakatakDb {
   }
 
   getRevision(deckId: number, revisionId?: number) {
-    const revisionStmt = this.db.prepare<
-      [number, number],
-      { id: number | null; card_ids: string | null }
-    >(`
-      SELECT revision.id, json(revision.card_ids) AS card_ids
+    const revisionStmt = this.db.prepare<[number, number], { id: number; card_ids: string }>(`
+      SELECT revision.id, json(card_set.card_ids) AS card_ids
       FROM deck
       JOIN revision ON deck.id = revision.deck_id
+      JOIN card_set ON revision.card_set_id = card_set.id
       WHERE deck.id = ?
       AND revision.id = ?
     `);
 
-    const latestRevisionStmt = this.db.prepare<
-      [number],
-      { id: number | null; card_ids: string | null }
-    >(`
-      SELECT revision.id, json(revision.card_ids) AS card_ids
+    const latestRevisionStmt = this.db.prepare<[number], { id: number; card_ids: string }>(`
+      SELECT revision.id, json(card_set.card_ids) AS card_ids
       FROM deck
       LEFT JOIN revision ON deck.id = revision.deck_id
+      LEFT JOIN card_set ON revision.card_set_id = card_set.id
       WHERE deck.id = ?
-      AND revision.hidden = 0
       ORDER BY revision.id DESC
       LIMIT 1
     `);
@@ -234,33 +229,34 @@ export class YakatakDb {
       : latestRevisionStmt.get(deckId);
     if (!revision) return undefined;
 
-    const cardIds = revision.card_ids ? (JSON.parse(revision.card_ids) as number[]) : [];
+    const cardIds = JSON.parse(revision.card_ids) as number[];
     const cards = cardIds.map((id) => cardStmt.get(id)!);
 
     return { id: revision.id, cards };
   }
 
-  createRevision(deckId: number, cardIds: number[], hidden: boolean) {
-    // Optimization to avoid duplicate revisions when saving for undo.
-    if (hidden) {
-      const stmt = this.db.prepare<[number, string], { id: number }>(`
-        SELECT id
-        FROM revision
-        WHERE deck_id = ?
-        AND card_ids = jsonb(?)
-        ORDER BY id DESC
-        LIMIT 1
-        `);
-      const row = stmt.get(deckId, JSON.stringify(cardIds));
-      if (row) return row;
-    }
+  createRevision(deckId: number, cardIds: number[]) {
+    const cardIdsJson = JSON.stringify(cardIds);
 
-    const stmt = this.db.prepare<[number, string, number], { id: number }>(`
-      INSERT INTO revision (deck_id, card_ids, hidden)
-      VALUES (?, jsonb(?), ?)
+    const upsertCardSetStmt = this.db.prepare<[string], { id: number }>(`
+      INSERT INTO card_set (card_ids)
+      VALUES (jsonb(?))
+      ON CONFLICT(card_ids) DO UPDATE SET card_ids = card_ids
       RETURNING id
     `);
-    return stmt.get(deckId, JSON.stringify(cardIds), hidden ? 1 : 0)!;
+
+    const createRevisionStmt = this.db.prepare<[number, number], { id: number }>(`
+      INSERT INTO revision (deck_id, card_set_id)
+      VALUES (?, ?)
+      RETURNING id
+    `);
+
+    const transaction = this.db.transaction(() => {
+      const cardSet = upsertCardSetStmt.get(cardIdsJson)!;
+      return createRevisionStmt.get(deckId, cardSet.id)!;
+    });
+
+    return transaction();
   }
 
   appendDelta(

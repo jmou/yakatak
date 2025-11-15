@@ -13,7 +13,7 @@ export interface Pile {
   cards: Card[];
   pickedCardIndex: number;
   deckId?: number;
-  revisionId?: number | null;
+  revisionId?: number;
 }
 
 export interface Snapshot {

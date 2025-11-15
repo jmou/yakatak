@@ -93,14 +93,19 @@ CREATE TABLE deck (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE card_set (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  -- e.g., jsonb('[1, 2, 3]')
+  card_ids BLOB NOT NULL UNIQUE
+);
+
 CREATE TABLE revision (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   deck_id INTEGER NOT NULL,
-  -- e.g., jsonb('[1, 2, 3]')
-  card_ids BLOB NOT NULL,
-  hidden NUMBER NOT NULL DEFAULT 0,
+  card_set_id INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY(deck_id) REFERENCES deck(id) ON DELETE CASCADE
+  FOREIGN KEY(deck_id) REFERENCES deck(id) ON DELETE CASCADE,
+  FOREIGN KEY(card_set_id) REFERENCES card_set(id) ON DELETE RESTRICT
 );
 
 -- insert: card_id IS NOT NULL AND old_position IS NULL

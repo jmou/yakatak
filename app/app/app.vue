@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as actions from "@/lib/actions";
-import { useScroll, whenever } from "@vueuse/core";
+import { useScroll } from "@vueuse/core";
 
 const store = useCardsStore();
 
@@ -18,25 +18,9 @@ watch(
   },
 );
 
-// TODO initialization is not safe with concurrent user actions
-const { data: decksData, pending, error } = useLazyFetch("/api/decks");
-whenever(decksData, async (decks) => {
-  const piles = decks.map((deck) => ({
-    name: `Deck ${deck.id}`,
-    cards: [],
-    pickedCardIndex: 0,
-    deckId: deck.id,
-    revisionId: null,
-  }));
-
-  store.piles.splice(1, 0, ...piles);
-
-  await Promise.all(
-    store.piles.entries().map(async ([i, pile]) => {
-      if (pile.deckId) await invokeCommand(ctx.value, ["loadPileFromDeckRevision", i]);
-    }),
-  );
-});
+// TODO restore initial loading
+const pending = ref(false);
+const error = ref();
 
 const status = ref("");
 let statusTimer: ReturnType<typeof setTimeout> | null = null;
@@ -74,6 +58,7 @@ async function viewTransition<T>(fn: () => T): Promise<T> {
 
 const ctx = computed<ActionContext>(() => ({
   store,
+  revisionCache: new Map(),
   setStatus,
   ask: chooser.value!.ask,
   viewTransition,
@@ -113,7 +98,7 @@ const rootKeyBindings: Readonly<Record<string, UserActionFn>> = {
   n: actions.nameActivePile,
   g: actions.goToChosenPile,
   R: () => ["reverseCardsInPile"],
-  r: (ctx) => ["loadPileFromDeckRevision", ctx.store.activePileIndex],
+  e: actions.loadPileFromChosenDeck,
 
   s: actions.takeSnapshot,
   S: actions.restoreSnapshot,
@@ -125,12 +110,12 @@ const rootKeyBindings: Readonly<Record<string, UserActionFn>> = {
 async function performLoggedCommand(forward: Command) {
   const location = store.currentLocation;
 
-  const reverse = await invokeCommand(ctx.value, forward);
+  const { reverse, revisions } = await invokeCommand(ctx.value, forward);
 
-  if (reverse) {
-    store.opLog.splice(store.opLogIndex);
-    store.opLog[store.opLogIndex++] = { forward, reverse, location };
-  }
+  store.opLog.splice(store.opLogIndex);
+  const entry: OpLogEntry = { forward, reverse, location };
+  if (revisions.length > 0) entry.revisions = revisions;
+  store.opLog[store.opLogIndex++] = entry;
 }
 
 // FIFO to serialize actions.

@@ -23,7 +23,7 @@ async function main() {
   }
 
   const deck = db.createDeck();
-  const revision = db.createRevision(deck.id, cardIds, false);
+  const revision = db.createRevision(deck.id, cardIds);
   console.log(`Created deck ${deck.id} revision ${revision.id}`);
 
   db.close();

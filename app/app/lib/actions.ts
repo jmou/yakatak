@@ -89,6 +89,45 @@ export const nameActivePile: UserActionFn = (ctx) => {
   return ["namePile", ctx.store.activePileIndex, name];
 };
 
+async function ensureSavedRevisionForPile(pile: Pile) {
+  if (pile.revisionId != null) return;
+  if (pile.cards.length === 0) return;
+
+  if (pile.deckId == null) {
+    const deck = await $fetch("/api/decks", { method: "POST" });
+    // By design, the reverse operation retains this new deck association.
+    pile.deckId = deck.id;
+  }
+
+  const pileId = checked(pile.deckId);
+  const card_ids = pile.cards.map((card) => card.id);
+  const revision = await $fetch(`/api/decks/${pileId}/revisions`, {
+    method: "POST",
+    body: { card_ids },
+  });
+  pile.revisionId = revision.id;
+}
+
+export const loadPileFromChosenDeck: UserActionFn = async (ctx) => {
+  const { decks } = await $fetch("/api/decks");
+  const openedDeckIds = new Set(ctx.store.piles.map((pile) => pile.deckId));
+  const unopenedDecks = decks.filter((deck) => !openedDeckIds.has(deck.id));
+  const deckId = await ctx.ask(
+    "Select deck",
+    unopenedDecks.map((s) => `Deck ${s.id}`),
+    unopenedDecks.map((s) => s.id),
+  );
+  if (deckId == null) return;
+
+  ctx.setStatus("Loading...");
+  await ensureSavedRevisionForPile(ctx.store.activePile);
+  const revision = await $fetch(`/api/decks/${deckId}/revisions/latest`);
+  ctx.revisionCache.set(revision.id, JSON.stringify(revision.cards));
+  ctx.setStatus("Loaded", { transient: true });
+
+  return ["loadDeck", ctx.store.activePileIndex, deckId, revision.id];
+};
+
 function serializeCard(card: Card) {
   const { id, url, title, numTiles } = card;
   return { id, url, title, numTiles };
@@ -131,12 +170,19 @@ export const restoreSnapshot: UserActionFn = async (ctx) => {
   ctx.setStatus("Loaded", { transient: true });
 };
 
+function restoreLocationAndRevisions(ctx: ActionContext, entry: OpLogEntry) {
+  [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = entry.location;
+  for (const { pileIndex, revisionId } of entry.revisions ?? []) {
+    checked(ctx.store.piles[pileIndex]).revisionId = revisionId;
+  }
+}
+
 export const applyOpLogReverse: UserActionFn = async (ctx) => {
   const entry = ctx.store.opLog[ctx.store.opLogIndex - 1];
   if (!entry) return;
 
   await invokeCommand(ctx, entry.reverse);
-  [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = entry.location;
+  restoreLocationAndRevisions(ctx, entry);
   ctx.store.opLogIndex--;
 };
 
@@ -144,7 +190,7 @@ export const applyOpLogForward: UserActionFn = async (ctx) => {
   const entry = ctx.store.opLog[ctx.store.opLogIndex];
   if (!entry) return;
 
-  [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = entry.location;
+  restoreLocationAndRevisions(ctx, entry);
   await invokeCommand(ctx, entry.forward);
   ctx.store.opLogIndex++;
 };

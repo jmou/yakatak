@@ -16,6 +16,7 @@ type CardsStore = ReturnType<typeof useCardsStore>;
 
 export interface OperationContext {
   store: CardsStore;
+  revisionCache: Map<number, string>;
   // Perform document.startViewTransition().
   viewTransition: <T>(fn: () => T) => Promise<T>;
 }
@@ -70,8 +71,11 @@ async function moveCard(
   if (sourcePile !== targetPile) {
     await pushDelta(sourcePile, null, sourceCardIndex);
     await pushDelta(targetPile, card, targetCardIndex);
+    ctx.store.markPileDirty(source[0]);
+    ctx.store.markPileDirty(target[0]);
   } else {
     await pushDelta(targetPile, card, targetCardIndex, sourceCardIndex);
+    ctx.store.markPileDirty(target[0]);
   }
 
   return ["moveCard", target, source, { followTarget, restorePicked: originalTargetPicked }];
@@ -84,6 +88,8 @@ function reverseCardsInPile(
   const pile = checked(ctx.store.piles[pileIndex]);
   pile.cards.reverse();
   pile.pickedCardIndex = pile.cards.length - 1 - pile.pickedCardIndex;
+  // FIXME doesn't store delta
+  ctx.store.markPileDirty(pileIndex);
   return ["reverseCardsInPile", pileIndex];
 }
 
@@ -98,6 +104,7 @@ function removeEmptyPile(ctx: OperationContext, pileIndex: number): Command {
     throw new Error("Cannot remove non-empty pile");
   }
   ctx.store.piles.splice(pileIndex, 1);
+  if (pileIndex <= ctx.store.activePileIndex) ctx.store.activePileIndex--;
   return ["createPile", pileIndex];
 }
 
@@ -118,30 +125,45 @@ function swapPiles(ctx: OperationContext, aPileIndex: number, bPileIndex: number
   return ["swapPiles", aPileIndex, bPileIndex];
 }
 
-// TODO this should probably be revamped around dirty decks
-async function loadPileFromDeckRevision(
+// Requires that the revision has been loaded into ctx.revisionCache.
+async function loadDeck(
   ctx: OperationContext,
   pileIndex: number,
-  revisionId?: number,
-): Promise<Command | undefined> {
-  const pile = ctx.store.piles[pileIndex];
-  if (pile?.deckId == null) return;
+  deckId: number,
+  revisionId: number,
+): Promise<Command> {
+  const pile = checked(ctx.store.piles[pileIndex]);
+  assert(pile.cards.length === 0 || pile.revisionId != null);
+  const reverse: Command =
+    pile.revisionId != null
+      ? ["loadDeck", pileIndex, checked(pile.deckId), pile.revisionId]
+      : ["unloadDeck", pileIndex];
 
-  const oldRevision = await $fetch(`/api/decks/${pile.deckId}/revisions`, {
-    method: "POST",
-    body: { hidden: true, card_ids: pile.cards.map((card) => card.id) },
-  });
+  ctx.store.markPileDirty(pileIndex);
+  pile.deckId = deckId;
+  pile.revisionId = revisionId;
+  const cards = JSON.parse(checked(ctx.revisionCache.get(revisionId))) as Card[];
 
-  const revision = await $fetch(`/api/decks/${pile.deckId}/revisions/${revisionId ?? "latest"}`);
-  pile.revisionId = revision.id;
-  pile.cards = revision.cards.map((card) => ({
+  // TODO clean up Card type
+  pile.cards = cards.map((card) => ({
     id: card.id,
     url: card.url ?? "",
     title: card.title ?? "(unknown)",
     numTiles: card.numTiles,
   }));
 
-  return ["loadPileFromDeckRevision", pileIndex, oldRevision.id];
+  return reverse;
+}
+
+function unloadDeck(ctx: OperationContext, pileIndex: number) {
+  const pile = checked(ctx.store.piles[pileIndex]);
+  assert(pile.deckId != null);
+  assert(pile.revisionId != null);
+  const reverse: Command = ["loadDeck", pileIndex, pile.deckId, pile.revisionId];
+  delete pile.deckId;
+  delete pile.revisionId;
+  pile.cards = [];
+  return reverse;
 }
 
 const opsByName = {
@@ -153,24 +175,28 @@ const opsByName = {
   moveCard,
   reverseCardsInPile,
 
-  loadPileFromDeckRevision,
+  loadDeck,
+  unloadDeck,
 };
 
-// Perform the operation requested by the Command.
-export async function invokeCommand(
-  ctx: OperationContext,
-  cmd: Command,
-): Promise<Command | undefined> {
+// Perform the operation requested by the Command. Returns the reverse operation
+// Command and any pile revisions that should be restored on undo.
+export async function invokeCommand(ctx: OperationContext, cmd: Command) {
+  assert(ctx.store.dirtyPiles.length === 0);
   const [opName, ...opArgs] = cmd;
+
   // This partially elided type exists only to check that all operations return
-  // Command (or undefined). We still use the discriminated type elsewhere.
+  // Command. We still use the discriminated type elsewhere.
   type FunctionReturnsCommand = (
     ctx: OperationContext,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
-  ) => MaybePromise<Command | undefined>;
+  ) => MaybePromise<Command>;
   // If type checking has an error on this line, there probably exists an
-  // operation in opsByName that does not return Command or undefined.
+  // operation in opsByName that does not return Command.
   const opFn: FunctionReturnsCommand = opsByName[opName];
-  return Promise.resolve(opFn(ctx, ...opArgs));
+
+  const reverse = await opFn(ctx, ...opArgs);
+  const revisions = ctx.store.dirtyPiles.splice(0);
+  return { reverse, revisions };
 }
