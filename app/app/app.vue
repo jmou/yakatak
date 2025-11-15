@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import * as actions from "@/lib/actions";
 import { useScroll, whenever } from "@vueuse/core";
 
 const store = useCardsStore();
@@ -7,6 +8,7 @@ const chooser = useTemplateRef("chooser");
 const detailsElem = ref<HTMLElement>();
 
 const { y: scrollY } = useScroll(detailsElem);
+const detailsIframe = ref(false);
 
 watch(
   () => store.pickedCard,
@@ -70,61 +72,60 @@ async function viewTransition<T>(fn: () => T): Promise<T> {
   }
 }
 
-const ctx = computed<OperationContext>(() => ({
+const ctx = computed<ActionContext>(() => ({
   store,
   setStatus,
   ask: chooser.value!.ask,
   viewTransition,
 }));
 
-const rootKeyBindings: Readonly<Record<string, Command>> = {
-  h: ["pickCardLeft"],
-  j: ["activatePileDown"],
-  k: ["activatePileUp"],
-  l: ["pickCardRight"],
+const rootKeyBindings: Readonly<Record<string, UserActionFn>> = {
+  h: actions.pickCardLeft,
+  j: actions.pickCardDown,
+  k: actions.pickCardUp,
+  l: actions.pickCardRight,
 
-  H: ["swapPickedCardWithNeighbor", "left"],
-  K: ["swapActivePileUp"],
-  J: ["swapActivePileDown"],
-  L: ["swapPickedCardWithNeighbor", "right"],
+  H: actions.swapPickedCardLeft,
+  J: actions.swapPickedCardDown,
+  K: actions.swapPickedCardUp,
+  L: actions.swapPickedCardRight,
 
-  "^": ["pickCardFirst"],
-  $: ["pickCardLast"],
+  "^": actions.pickCardFirst,
+  $: actions.pickCardLast,
 
-  "1": ["movePickedCardToPile", 1],
-  "2": ["movePickedCardToPile", 2],
-  "3": ["movePickedCardToPile", 3],
-  "4": ["movePickedCardToPile", 4],
-  "5": ["movePickedCardToPile", 5],
-  "6": ["movePickedCardToPile", 6],
-  "7": ["movePickedCardToPile", 7],
-  "8": ["movePickedCardToPile", 8],
-  "9": ["movePickedCardToPile", 9],
-  "0": ["movePickedCardToPile", 10],
+  "1": actions.movePickedCardToPile(1),
+  "2": actions.movePickedCardToPile(2),
+  "3": actions.movePickedCardToPile(3),
+  "4": actions.movePickedCardToPile(4),
+  "5": actions.movePickedCardToPile(5),
+  "6": actions.movePickedCardToPile(6),
+  "7": actions.movePickedCardToPile(7),
+  "8": actions.movePickedCardToPile(8),
+  "9": actions.movePickedCardToPile(9),
+  "0": actions.movePickedCardToPile(10),
 
-  Enter: ["openPickedCardPage"],
-  i: ["toggleIframeDetails"],
-  d: ["discardPickedCard"],
+  Enter: actions.openPickedCardPage,
+  i: () => void (detailsIframe.value = !detailsIframe.value),
+  d: actions.movePickedCardToPile(PILE_DISCARD),
 
-  o: ["createPileDown"],
-  O: ["createPileUp"],
-  n: ["nameActivePile"],
-  g: ["goToChosenPile"],
-  R: ["reverseCardsInPile"],
-  r: ["refreshActivePile"],
+  o: (ctx) => ["createPile", ctx.store.activePileIndex + 1],
+  O: (ctx) => ["createPile", ctx.store.activePileIndex],
+  n: actions.nameActivePile,
+  g: actions.goToChosenPile,
+  R: () => ["reverseCardsInPile"],
+  r: (ctx) => ["loadPileFromDeckRevision", ctx.store.activePileIndex],
 
-  s: ["takeSnapshot"],
-  S: ["restoreSnapshot"],
+  s: actions.takeSnapshot,
+  S: actions.restoreSnapshot,
 
-  u: ["applyOpLogReverse"],
-  U: ["applyOpLogForward"],
+  u: actions.applyOpLogReverse,
+  U: actions.applyOpLogForward,
 };
 
 async function performLoggedCommand(forward: Command) {
   const location = store.currentLocation;
 
-  const ctx = { store, setStatus, ask: chooser.value!.ask, viewTransition };
-  const reverse = await invokeCommand(ctx, forward);
+  const reverse = await invokeCommand(ctx.value, forward);
 
   if (reverse) {
     store.opLog.splice(store.opLogIndex);
@@ -132,30 +133,36 @@ async function performLoggedCommand(forward: Command) {
   }
 }
 
-// FIFO to serialize operations.
-const pendingCommands: Command[] = [];
+// FIFO to serialize actions.
+const pendingActions: UserActionFn[] = [];
 let processingPromise: Promise<void> | null = null;
 
-async function startCommandProcessing() {
+async function startActionProcessing() {
   while (true) {
-    const cmd = pendingCommands.shift();
-    if (!cmd) break;
-    await performLoggedCommand(cmd);
+    const actionFn = pendingActions.shift();
+    if (!actionFn) break;
+    try {
+      const cmd = await actionFn(ctx.value);
+      if (cmd) await performLoggedCommand(cmd);
+    } catch (err) {
+      setStatus("ERROR");
+      throw err;
+    }
   }
   processingPromise = null;
 }
 
-function dispatchCommand(cmd: Command) {
-  pendingCommands.push(cmd);
-  if (!processingPromise) processingPromise = startCommandProcessing();
+function dispatchAction(actionFn: UserActionFn) {
+  pendingActions.push(actionFn);
+  if (!processingPromise) processingPromise = startActionProcessing();
 }
 
-function onKeydown(event: KeyboardEvent) {
-  const cmd = rootKeyBindings[event.key];
-  if (cmd) dispatchCommand(cmd);
+function onKeyDown(event: KeyboardEvent) {
+  const actionFn = rootKeyBindings[event.key];
+  if (actionFn) dispatchAction(actionFn);
 }
 
-provide("dispatchCommand", dispatchCommand);
+provide("dispatchAction", dispatchAction);
 
 onMounted(() => detailsElem.value!.focus());
 </script>
@@ -169,9 +176,9 @@ onMounted(() => detailsElem.value!.focus());
         :pending
         :error
         :card="store.pickedCard"
-        :iframe="store.iframeDetails"
+        :iframe="detailsIframe"
         tabindex="0"
-        @keydown="onKeydown"
+        @keydown="onKeyDown"
       />
       <PilesPane
         v-model:active="store.activePileIndex"

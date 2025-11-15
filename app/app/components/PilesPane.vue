@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import { pickCard } from "~/lib/actions";
+
 defineProps<{
   piles: Pile[];
 }>();
 
 const active = defineModel<number>("active");
 
-const dispatchCommand = useDispatchCommand();
+const dispatchAction = useDispatchAction();
 
 const activeElem = ref<HTMLElement>();
 watchEffect(() => activeElem.value?.scrollIntoView({ block: "nearest" }));
@@ -25,7 +27,7 @@ watchEffect(() => activeElem.value?.scrollIntoView({ block: "nearest" }));
         </header>
         <CardCarousel
           :pile
-          @pick="(cardIndex) => dispatchCommand(['pickCard', pileIndex, cardIndex])"
+          @pick="(cardIndex) => dispatchAction(pickCard(pileIndex, cardIndex))"
           v-on="{ focus: $attrs.onFocus }"
         />
       </section>

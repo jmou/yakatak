@@ -20,7 +20,6 @@ export const useCardsStore = defineStore("cards", () => {
   const activePileIndex = ref(PILE_START);
   const opLog = ref<OpLogEntry[]>([]);
   const opLogIndex = ref(0);
-  const iframeDetails = ref(false);
 
   const activePile = computed(() => checked(piles.value[activePileIndex.value]));
   const pickedCard = computed(() => activePile.value.cards[activePile.value.pickedCardIndex]);
@@ -49,7 +48,6 @@ export const useCardsStore = defineStore("cards", () => {
     activePileIndex,
     opLog,
     opLogIndex,
-    iframeDetails,
 
     // getters
     activePile,

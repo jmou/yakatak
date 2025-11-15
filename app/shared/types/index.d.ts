@@ -1,3 +1,5 @@
+export type MaybePromise<T> = T | Promise<T>;
+
 export interface Card {
   readonly id: number;
   readonly url: string;
