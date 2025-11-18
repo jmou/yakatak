@@ -8,27 +8,26 @@ const emit = defineEmits<{
   pick: [];
 }>();
 
-const elem = useTemplateRef("elem");
+const title = computed(() => card?.title ?? "(unknown)");
 
 const imgSrc = computed(() => (card ? `/api/scrapes/${card.id}/thumb` : undefined));
 
 const style = computed(() => {
   if (!card) return undefined;
   // TODO handle (or disallow) duplicate cards
-  return { viewTransitionName: `card-${card.id}` };
+  return { viewTransitionName: `card-${card.key}` };
 });
 </script>
 
 <template>
   <a
-    ref="elem"
-    :href="card?.url"
+    :href="card?.url ?? undefined"
     class="card"
     :class="{ picked: isPicked }"
     :style
     @click.exact.prevent="emit('pick')"
   >
-    <img :src="imgSrc" :alt="card?.title" :title="card?.title" />
+    <img :src="imgSrc" :alt="title" :title="title" />
   </a>
 </template>
 

@@ -1,4 +1,9 @@
-export default defineEventHandler(async (event) => {
+interface Revision {
+  id: number;
+  cards: CardData[];
+}
+
+export default defineEventHandler(async (event): Promise<Revision> => {
   const config = useRuntimeConfig(event);
   const db = await getDb(config.dbPath);
   const params = getRouterParams(event);

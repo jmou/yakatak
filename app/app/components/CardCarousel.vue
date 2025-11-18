@@ -59,7 +59,7 @@ const carouselStyle = computed(() => ({
     <div v-if="realStart > 0" class="horizontal-spacer" :style="{ '--num-cards': realStart }"></div>
     <CardCarouselItem
       v-for="(card, i) in pile.cards.slice(realStart, realEnd)"
-      :key="card.id"
+      :key="card.key"
       :card="card"
       :is-picked="realStart + i === pile.pickedCardIndex"
       @pick="emit('pick', realStart + i)"

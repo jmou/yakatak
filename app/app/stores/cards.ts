@@ -1,3 +1,24 @@
+export interface Card extends CardData {
+  // Unlike id, key will be unique if there are multiple instances of this Card.
+  // It is regenerated whenever a Card is instantiated.
+  key: number;
+  scrollY?: number;
+}
+
+let nextCardKey = 0;
+
+export function makeCard(data: CardData): Card {
+  return { ...data, key: nextCardKey++ };
+}
+
+export interface Pile {
+  name: string;
+  cards: Card[];
+  pickedCardIndex: number;
+  deckId?: number;
+  revisionId?: number;
+}
+
 export type CardLocation = readonly [pileIndex: number, cardIndex: number];
 
 export interface PileRevision {

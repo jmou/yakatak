@@ -7,8 +7,8 @@ defineProps<{
 <template>
   <header>
     <div v-if="card">
-      <div class="title">{{ card.title }}</div>
-      <a :href="card.url">{{ card.url }}</a>
+      <div class="title">{{ card.title ?? "(unknown)" }}</div>
+      <a v-if="card.url != null" :href="card.url">{{ card.url }}</a>
     </div>
   </header>
 </template>

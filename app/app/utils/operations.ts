@@ -16,7 +16,7 @@ type CardsStore = ReturnType<typeof useCardsStore>;
 
 export interface OperationContext {
   store: CardsStore;
-  revisionCache: Map<number, string>;
+  revisionCache: Map<number, CardData[]>;
   // Perform document.startViewTransition().
   viewTransition: <T>(fn: () => T) => Promise<T>;
 }
@@ -142,15 +142,7 @@ async function loadDeck(
   ctx.store.markPileDirty(pileIndex);
   pile.deckId = deckId;
   pile.revisionId = revisionId;
-  const cards = JSON.parse(checked(ctx.revisionCache.get(revisionId))) as Card[];
-
-  // TODO clean up Card type
-  pile.cards = cards.map((card) => ({
-    id: card.id,
-    url: card.url ?? "",
-    title: card.title ?? "(unknown)",
-    numTiles: card.numTiles,
-  }));
+  pile.cards = checked(ctx.revisionCache.get(revisionId)).map(makeCard);
 
   return reverse;
 }

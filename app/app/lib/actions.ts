@@ -71,7 +71,7 @@ export const swapPickedCardDown: UserActionFn = (ctx) => {
 };
 
 export const openPickedCardPage: UserActionFn = (ctx) => {
-  if (ctx.store.pickedCard) open(ctx.store.pickedCard.url);
+  if (ctx.store.pickedCard?.url != null) open(ctx.store.pickedCard.url);
 };
 
 export const goToChosenPile: UserActionFn = async (ctx) => {
@@ -122,7 +122,7 @@ export const loadPileFromChosenDeck: UserActionFn = async (ctx) => {
   ctx.setStatus("Loading...");
   await ensureSavedRevisionForPile(ctx.store.activePile);
   const revision = await $fetch(`/api/decks/${deckId}/revisions/latest`);
-  ctx.revisionCache.set(revision.id, JSON.stringify(revision.cards));
+  ctx.revisionCache.set(revision.id, revision.cards);
   ctx.setStatus("Loaded", { transient: true });
 
   return ["loadDeck", ctx.store.activePileIndex, deckId, revision.id];
@@ -162,7 +162,7 @@ export const restoreSnapshot: UserActionFn = async (ctx) => {
 
   ctx.setStatus("Loading...");
   const data = await $fetch(`/api/snapshots/${snapshotId}`);
-  ctx.store.piles = data.piles;
+  ctx.store.piles = data.piles.map((pile) => ({ ...pile, cards: pile.cards.map(makeCard) }));
   ctx.store.activePileIndex = data.activePileIndex;
   // We restore the op log, so the restore operation itself cannot be undone.
   ctx.store.opLog = data.opLog;

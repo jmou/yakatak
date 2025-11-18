@@ -14,7 +14,7 @@ const elem = defineModel<HTMLElement>("elem");
     <div class="spacer"></div>
     <div v-if="pending" class="pending">Loading cards...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
-    <iframe v-else-if="card && iframe" :src="card.url"></iframe>
+    <iframe v-else-if="card?.url != null && iframe" :src="card.url"></iframe>
     <template v-else-if="card">
       <img
         v-for="tileIndex in Array.from({ length: card.numTiles }, (_, i) => i)"
