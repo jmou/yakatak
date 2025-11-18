@@ -78,7 +78,7 @@ export const goToChosenPile: UserActionFn = async (ctx) => {
   const options = ctx.store.piles
     .slice(PILE_START)
     .map((pile, i) => `${i + 1}. ${pile.name ?? "(unnamed)"}`);
-  const position = await ctx.ask("Piles", options);
+  const position = await ctx.ask("Piles", options, ctx.store.activePileIndex - PILE_START);
   if (position == null) return;
   ctx.store.activePileIndex = PILE_START + position;
 };
@@ -110,12 +110,17 @@ async function ensureSavedRevisionForPile(pile: Pile) {
 
 export const loadPileFromChosenDeck: UserActionFn = async (ctx) => {
   const { decks } = await $fetch("/api/decks");
-  const openedDeckIds = new Set(ctx.store.piles.map((pile) => pile.deckId));
-  const unopenedDecks = decks.filter((deck) => !openedDeckIds.has(deck.id));
+  const excludeDeckIds = new Set(ctx.store.piles.map((pile) => pile.deckId));
+  excludeDeckIds.delete(ctx.store.activePile.deckId);
+  const candidateDecks = decks.filter((deck) => !excludeDeckIds.has(deck.id));
+  const currentDeckIndex = candidateDecks.findIndex(
+    (deck) => deck.id === ctx.store.activePile.deckId,
+  );
   const deckId = await ctx.ask(
     "Select deck",
-    unopenedDecks.map((s) => `Deck ${s.id}`),
-    unopenedDecks.map((s) => s.id),
+    candidateDecks.map((s) => `Deck ${s.id}`),
+    currentDeckIndex < 0 ? 0 : currentDeckIndex,
+    candidateDecks.map((s) => s.id),
   );
   if (deckId == null) return;
 
@@ -156,6 +161,7 @@ export const restoreSnapshot: UserActionFn = async (ctx) => {
   const snapshotId = await ctx.ask(
     "Select snapshot",
     snapshots.map((s) => s.createdAt),
+    0,
     snapshots.map((s) => s.id),
   );
   if (snapshotId == null) return;

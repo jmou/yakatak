@@ -56,23 +56,36 @@ function onKeyDown(event: KeyboardEvent) {
  * Present to the user a dialog for choosing among the provided labels.
  * @param title Dialog title
  * @param labels Display texts for the user to choose among
+ * @param defaultIndex The initially selected index
  * @returns The index of the user's choice
  */
-function ask(title: string, labels: string[]): Promise<number | null>;
+function ask(title: string, labels: string[], defaultIndex?: number): Promise<number | null>;
 /**
  * Present to the user a dialog for choosing among the provided labels.
  * @param title Dialog title
  * @param labels Display texts for the user to choose among
+ * @param defaultIndex The initially selected index
  * @param values Values corresponding to `labels`
  * @returns The value at the index of the user's choice
  */
-function ask<T>(title: string, labels: string[], values: T[]): Promise<T | null>;
-function ask<T = number>(title: string, labels: string[], values?: T[]): Promise<T | null> {
+function ask<T>(
+  title: string,
+  labels: string[],
+  defaultIndex: number,
+  values: T[],
+): Promise<T | null>;
+function ask<T = number>(
+  title: string,
+  labels: string[],
+  defaultIndex: number = 0,
+  values: T[] | null = null,
+): Promise<T | null> {
   assert(values == null || labels.length === values.length);
+  assert(defaultIndex <= labels.length);
   state.title = title;
   state.labels = labels;
-  state.values = values ?? null;
-  state.selectedIndex = 0;
+  state.values = values;
+  state.selectedIndex = defaultIndex;
 
   nextTick(() => {
     elem.value!.showModal();
