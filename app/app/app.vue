@@ -107,10 +107,39 @@ const rootKeyBindings: Readonly<Record<string, UserActionFn>> = {
   U: actions.applyOpLogForward,
 };
 
+async function pushDelta(pile: Pile, card: Card | null, position: number, oldPosition?: number) {
+  if (pile.deckId == null || pile.revisionId == null) return;
+  const { deckId, revisionId } = pile;
+  const body = { deckId, revisionId, position, oldPosition, cardId: card?.id };
+  await $fetch(`/api/deltas`, {
+    method: "POST",
+    body,
+  });
+}
+
 async function performLoggedCommand(forward: Command) {
   const location = store.currentLocation;
 
-  const { reverse, revisions } = await invokeCommand(ctx.value, forward);
+  // TODO less hacky way to determine whether to use a view transition
+  const { reverse, revisions } =
+    forward[0] === "moveCard"
+      ? await viewTransition(() => invokeCommand(ctx.value, forward))
+      : invokeCommand(ctx.value, forward);
+
+  // TODO poor encapsulation
+  if (forward[0] === "moveCard") {
+    const sourcePile = checked(store.piles[forward[1][0]]);
+    const targetPile = checked(store.piles[forward[2][0]]);
+    const sourceCardIndex = forward[1][1];
+    const targetCardIndex = forward[2][1];
+    const card = checked(targetPile.cards[targetCardIndex]);
+    if (sourcePile !== targetPile) {
+      await pushDelta(sourcePile, null, sourceCardIndex);
+      await pushDelta(targetPile, card, targetCardIndex);
+    } else {
+      await pushDelta(targetPile, card, targetCardIndex, sourceCardIndex);
+    }
+  }
 
   store.opLog.splice(store.opLogIndex);
   const entry: OpLogEntry = { forward, reverse, location };

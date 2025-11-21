@@ -17,27 +17,15 @@ type CardsStore = ReturnType<typeof useCardsStore>;
 export interface OperationContext {
   store: CardsStore;
   revisionCache: Map<number, CardData[]>;
-  // Perform document.startViewTransition().
-  viewTransition: <T>(fn: () => T) => Promise<T>;
-}
-
-async function pushDelta(pile: Pile, card: Card | null, position: number, oldPosition?: number) {
-  if (pile.deckId == null || pile.revisionId == null) return;
-  const { deckId, revisionId } = pile;
-  const body = { deckId, revisionId, position, oldPosition, cardId: card?.id };
-  await $fetch(`/api/deltas`, {
-    method: "POST",
-    body,
-  });
 }
 
 // TODO simplify options
-async function moveCard(
+function moveCard(
   ctx: OperationContext,
   source: CardLocation,
   target: CardLocation,
   options: { restorePicked?: number; followTarget?: boolean } = {},
-): Promise<Command> {
+): Command {
   const { restorePicked, followTarget = false } = options;
 
   const sourcePile = checked(ctx.store.piles[source[0]]);
@@ -52,31 +40,19 @@ async function moveCard(
 
   const originalTargetPicked = targetPile.pickedCardIndex;
 
-  const card = await ctx.viewTransition(() => {
-    const card = checked(sourcePile.cards.splice(sourceCardIndex, 1)[0]);
-    if (restorePicked !== undefined) sourcePile.pickedCardIndex = restorePicked;
-    targetPile.cards.splice(targetCardIndex, 0, card);
-    targetPile.pickedCardIndex = targetCardIndex;
+  const card = checked(sourcePile.cards.splice(sourceCardIndex, 1)[0]);
+  if (restorePicked !== undefined) sourcePile.pickedCardIndex = restorePicked;
+  targetPile.cards.splice(targetCardIndex, 0, card);
+  targetPile.pickedCardIndex = targetCardIndex;
 
-    // followTarget exists for cosmetic reasons. When swapping cards within
-    // a pile, the selection follows the picked card to its target location.
-    // While our caller could arrange for this update, it would happen after
-    // the view transition. To avoid artifacts, we push it down here.
-    if (followTarget) [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = target;
+  // followTarget exists for cosmetic reasons. When swapping cards within
+  // a pile, the selection follows the picked card to its target location.
+  // While our caller could arrange for this update, it would happen after
+  // the view transition. To avoid artifacts, we push it down here.
+  if (followTarget) [ctx.store.activePileIndex, ctx.store.activePile.pickedCardIndex] = target;
 
-    return card;
-  });
-
-  // TODO disable during replay
-  if (sourcePile !== targetPile) {
-    await pushDelta(sourcePile, null, sourceCardIndex);
-    await pushDelta(targetPile, card, targetCardIndex);
-    ctx.store.markPileDirty(source[0]);
-    ctx.store.markPileDirty(target[0]);
-  } else {
-    await pushDelta(targetPile, card, targetCardIndex, sourceCardIndex);
-    ctx.store.markPileDirty(target[0]);
-  }
+  ctx.store.markPileDirty(source[0]);
+  ctx.store.markPileDirty(target[0]);
 
   return ["moveCard", target, source, { followTarget, restorePicked: originalTargetPicked }];
 }
@@ -126,12 +102,12 @@ function swapPiles(ctx: OperationContext, aPileIndex: number, bPileIndex: number
 }
 
 // Requires that the revision has been loaded into ctx.revisionCache.
-async function loadDeck(
+function loadDeck(
   ctx: OperationContext,
   pileIndex: number,
   deckId: number,
   revisionId: number,
-): Promise<Command> {
+): Command {
   const pile = checked(ctx.store.piles[pileIndex]);
   assert(pile.cards.length === 0 || pile.revisionId != null);
   const reverse: Command =
@@ -173,7 +149,7 @@ const opsByName = {
 
 // Perform the operation requested by the Command. Returns the reverse operation
 // Command and any pile revisions that should be restored on undo.
-export async function invokeCommand(ctx: OperationContext, cmd: Command) {
+export function invokeCommand(ctx: OperationContext, cmd: Command) {
   assert(ctx.store.dirtyPiles.length === 0);
   const [opName, ...opArgs] = cmd;
 
@@ -183,12 +159,12 @@ export async function invokeCommand(ctx: OperationContext, cmd: Command) {
     ctx: OperationContext,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
-  ) => MaybePromise<Command>;
+  ) => Command;
   // If type checking has an error on this line, there probably exists an
   // operation in opsByName that does not return Command.
   const opFn: FunctionReturnsCommand = opsByName[opName];
 
-  const reverse = await opFn(ctx, ...opArgs);
+  const reverse = opFn(ctx, ...opArgs);
   const revisions = ctx.store.dirtyPiles.splice(0);
   return { reverse, revisions };
 }

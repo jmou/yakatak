@@ -187,7 +187,7 @@ export const applyOpLogReverse: UserActionFn = async (ctx) => {
   const entry = ctx.store.opLog[ctx.store.opLogIndex - 1];
   if (!entry) return;
 
-  await invokeCommand(ctx, entry.reverse);
+  invokeCommand(ctx, entry.reverse);
   restoreLocationAndRevisions(ctx, entry);
   ctx.store.opLogIndex--;
 };
@@ -197,6 +197,6 @@ export const applyOpLogForward: UserActionFn = async (ctx) => {
   if (!entry) return;
 
   restoreLocationAndRevisions(ctx, entry);
-  await invokeCommand(ctx, entry.forward);
+  invokeCommand(ctx, entry.forward);
   ctx.store.opLogIndex++;
 };
