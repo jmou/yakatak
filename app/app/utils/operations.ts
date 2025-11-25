@@ -134,6 +134,37 @@ function unloadDeck(ctx: OperationContext, pileIndex: number) {
   return reverse;
 }
 
+function insertCard(
+  ctx: OperationContext,
+  pileIndex: number,
+  cardIndex: number,
+  cardData: CardData,
+): Command {
+  const pile = checked(ctx.store.piles[pileIndex]);
+  const card = makeCard(cardData);
+  pile.cards.splice(cardIndex, 0, card);
+  pile.pickedCardIndex = cardIndex;
+  ctx.store.markPileDirty(pileIndex);
+  return ["removeCard", pileIndex, cardIndex];
+}
+
+function removeCard(ctx: OperationContext, pileIndex: number, cardIndex: number): Command {
+  const pile = checked(ctx.store.piles[pileIndex]);
+  const card = checked(pile.cards[cardIndex]);
+  const cardData: CardData = {
+    id: card.id,
+    url: card.url,
+    title: card.title,
+    numTiles: card.numTiles,
+  };
+  pile.cards.splice(cardIndex, 1);
+  if (pile.pickedCardIndex >= pile.cards.length) {
+    pile.pickedCardIndex = Math.max(0, pile.cards.length - 1);
+  }
+  ctx.store.markPileDirty(pileIndex);
+  return ["insertCard", pileIndex, cardIndex, cardData];
+}
+
 const opsByName = {
   createPile,
   removeEmptyPile,
@@ -145,6 +176,9 @@ const opsByName = {
 
   loadDeck,
   unloadDeck,
+
+  insertCard,
+  removeCard,
 };
 
 // Perform the operation requested by the Command. Returns the reverse operation

@@ -90,7 +90,8 @@ const rootKeyBindings: Readonly<Record<string, UserActionFn>> = {
   "0": actions.movePickedCardToPile(10),
 
   Enter: actions.openPickedCardPage,
-  i: () => void (detailsIframe.value = !detailsIframe.value),
+  v: () => void (detailsIframe.value = !detailsIframe.value),
+  i: actions.insertCardFromUrl,
   d: actions.movePickedCardToPile(PILE_DISCARD),
 
   o: (ctx) => ["createPile", ctx.store.activePileIndex + 1],

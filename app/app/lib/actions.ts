@@ -200,3 +200,29 @@ export const applyOpLogForward: UserActionFn = async (ctx) => {
   invokeCommand(ctx, entry.forward);
   ctx.store.opLogIndex++;
 };
+
+export const insertCardFromUrl: UserActionFn = async (ctx) => {
+  const url = prompt("Enter URL");
+  if (!url) return;
+
+  ctx.setStatus("Enqueueing...");
+  const response = await $fetch("/api/cards", {
+    method: "POST",
+    body: { url },
+  });
+
+  // Insert the card with placeholder data; it will be populated after collection
+  const cardData: CardData = {
+    id: response.id,
+    url,
+    title: null,
+    numTiles: 0,
+  };
+
+  ctx.setStatus("Added", { transient: true });
+
+  const pileIndex = ctx.store.activePileIndex;
+  const cardIndex = ctx.store.activePile.pickedCardIndex + 1;
+
+  return ["insertCard", pileIndex, cardIndex, cardData];
+};
