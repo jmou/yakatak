@@ -179,7 +179,71 @@ function onKeyDown(event: KeyboardEvent) {
 
 provide("dispatchAction", dispatchAction);
 
-onMounted(() => detailsElem.value!.focus());
+// Periodically reload cards with null titles
+const POLL_INTERVAL_MS = 5000;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function reloadPendingCards() {
+  const pendingCards: { pile: Pile; cardIndex: number; card: Card }[] = [];
+
+  for (const pile of store.piles) {
+    for (let cardIndex = 0; cardIndex < pile.cards.length; cardIndex++) {
+      const card = pile.cards[cardIndex]!;
+      if (card.title === null) {
+        pendingCards.push({ pile, cardIndex, card });
+      }
+    }
+  }
+
+  if (pendingCards.length === 0) return;
+
+  const updates = await Promise.allSettled(
+    pendingCards.map(({ card }) => $fetch(`/api/cards/${card.id}`))
+  );
+
+  for (let i = 0; i < updates.length; i++) {
+    const result = updates[i];
+    if (result?.status === "fulfilled") {
+      const { pile, cardIndex, card } = pendingCards[i]!;
+      const data = result.value;
+
+      // Replace the card with updated data, preserving the key and scrollY
+      pile.cards[cardIndex] = {
+        ...data,
+        key: card.key,
+        scrollY: card.scrollY,
+      };
+    }
+  }
+}
+
+function startPolling() {
+  async function poll() {
+    try {
+      await reloadPendingCards();
+    } catch (error) {
+      console.error("Failed to reload pending cards:", error);
+    }
+    pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
+  }
+  poll();
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+}
+
+onMounted(() => {
+  detailsElem.value!.focus();
+  startPolling();
+});
+
+onBeforeUnmount(() => {
+  stopPolling();
+});
 </script>
 
 <template>
