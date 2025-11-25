@@ -2,7 +2,38 @@
 import * as actions from "@/lib/actions";
 import { useScroll } from "@vueuse/core";
 
+const route = useRoute();
+const workspaceId = computed(() => parseInt(route.params.id as string));
+
 const store = useCardsStore();
+
+function preprocessOperations(operations: Array<{ id: number; command: unknown[] }>) {
+  const result: unknown[][] = [];
+
+  for (const op of operations) {
+    if (op.command[0] === "rewind") {
+      const targetIndex = op.command[1] as number;
+      result.splice(targetIndex);
+    } else {
+      result.push(op.command);
+    }
+  }
+
+  return result;
+}
+
+async function loadAndReplayOperations() {
+  const { operations } = await $fetch(`/api/workspaces/${workspaceId.value}/operations`);
+  const commandsToReplay = preprocessOperations(operations);
+
+  for (const command of commandsToReplay) {
+    const { reverse, revisions } = invokeCommand(ctx.value, command as Command);
+    const location = store.currentLocation;
+    const entry: OpLogEntry = { forward: command as Command, reverse, location };
+    if (revisions.length > 0) entry.revisions = revisions;
+    store.opLog[store.opLogIndex++] = entry;
+  }
+}
 
 const chooser = useTemplateRef("chooser");
 const detailsElem = ref<HTMLElement>();
@@ -141,10 +172,26 @@ async function performLoggedCommand(forward: Command) {
     }
   }
 
+  // Check if we're rewinding (inserting in the middle of the log)
+  const isRewinding = store.opLogIndex < store.opLog.length;
+
   store.opLog.splice(store.opLogIndex);
   const entry: OpLogEntry = { forward, reverse, location };
   if (revisions.length > 0) entry.revisions = revisions;
   store.opLog[store.opLogIndex++] = entry;
+
+  // Save operation(s) to database
+  if (isRewinding) {
+    // When rewinding, save both the rewind command and the actual forward command
+    await $fetch(`/api/workspaces/${workspaceId.value}/operations`, {
+      method: "POST",
+      body: { command: ["rewind", store.opLogIndex - 1] },
+    });
+  }
+  await $fetch(`/api/workspaces/${workspaceId.value}/operations`, {
+    method: "POST",
+    body: { command: forward },
+  });
 }
 
 // FIFO to serialize actions.
@@ -178,7 +225,10 @@ function onKeyDown(event: KeyboardEvent) {
 
 provide("dispatchAction", dispatchAction);
 
-onMounted(() => detailsElem.value!.focus());
+onMounted(async () => {
+  detailsElem.value!.focus();
+  await loadAndReplayOperations();
+});
 </script>
 
 <template>
