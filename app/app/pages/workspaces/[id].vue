@@ -6,6 +6,7 @@ const route = useRoute();
 const workspaceId = computed(() => parseInt(route.params.id as string));
 
 const store = useCardsStore();
+const revisionCache = ref(new Map<number, CardData[]>());
 
 function preprocessOperations(operations: Array<{ id: number; command: unknown[] }>) {
   const result: unknown[][] = [];
@@ -26,6 +27,25 @@ async function loadAndReplayOperations() {
   const { operations } = await $fetch(`/api/workspaces/${workspaceId.value}/operations`);
   const commandsToReplay = preprocessOperations(operations);
 
+  // Collect all unique revision IDs from loadDeck commands
+  const revisionIds = new Set<number>();
+  for (const command of commandsToReplay) {
+    if (command[0] === "loadDeck") {
+      const revisionId = command[3] as number;
+      revisionIds.add(revisionId);
+    }
+  }
+
+  // Preload all revisions into the cache
+  for (const revisionId of revisionIds) {
+    const deckId = commandsToReplay.find(
+      (cmd) => cmd[0] === "loadDeck" && cmd[3] === revisionId
+    )?.[2] as number;
+    const revision = await $fetch(`/api/decks/${deckId}/revisions/${revisionId}`);
+    revisionCache.value.set(revisionId, revision.cards);
+  }
+
+  // Replay operations
   for (const command of commandsToReplay) {
     const { reverse, revisions } = invokeCommand(ctx.value, command as Command);
     const location = store.currentLocation;
@@ -89,10 +109,13 @@ async function viewTransition<T>(fn: () => T): Promise<T> {
 
 const ctx = computed<ActionContext>(() => ({
   store,
-  revisionCache: new Map(),
+  revisionCache: revisionCache.value,
   setStatus,
   ask: chooser.value!.ask,
   viewTransition,
+  navigate: async (path: string) => {
+    await navigateTo(path);
+  },
 }));
 
 const rootKeyBindings: Readonly<Record<string, UserActionFn>> = {
@@ -136,6 +159,8 @@ const rootKeyBindings: Readonly<Record<string, UserActionFn>> = {
 
   u: actions.applyOpLogReverse,
   U: actions.applyOpLogForward,
+
+  w: actions.loadChosenWorkspace,
 };
 
 async function pushDelta(pile: Pile, card: Card | null, position: number, oldPosition?: number) {

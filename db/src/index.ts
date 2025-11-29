@@ -517,6 +517,14 @@ export class YakatakDb {
     stmt.run(JSON.stringify(data));
   }
 
+  listWorkspaces(): Array<{ id: number; created_at: string }> {
+    const stmt = this.db.prepare<[], { id: number; created_at: string }>(`
+      SELECT id, created_at FROM workspace
+      ORDER BY created_at DESC
+    `);
+    return stmt.all();
+  }
+
   getMostRecentWorkspace(): { id: number } | undefined {
     const stmt = this.db.prepare<[], { id: number }>(`
       SELECT id FROM workspace
