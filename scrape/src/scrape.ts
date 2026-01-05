@@ -24,24 +24,37 @@ class ScrapeRecorder {
 
   // Daemon configuration
   private maxConcurrency: number = 5;
-  private domainDelayMs: number = 5000; // 5 seconds between scrapes to same domain
+  private maxTokensPerDomain: number = 2; // Max concurrent scrapes per domain
+  private leaseDurationSec: number = 5; // Token lease duration in seconds
 
   // Tracking state
   private activeScrapes: Set<Promise<void>> = new Set();
-  private domainLastScrape: Map<string, number> = new Map();
 
-  private constructor(dbPath: string, stateDir: string, maxConcurrency?: number, domainDelayMs?: number) {
+  private constructor(
+    dbPath: string,
+    stateDir: string,
+    maxConcurrency?: number,
+    maxTokensPerDomain?: number,
+    leaseDurationSec?: number,
+  ) {
     this.stateDir = stateDir;
     this.db = new YakatakDb(dbPath);
     this.browser = playwright.chromium.launch();
     this.workerId = `scrape:${os.hostname()}:${process.pid}`;
 
     if (maxConcurrency !== undefined) this.maxConcurrency = maxConcurrency;
-    if (domainDelayMs !== undefined) this.domainDelayMs = domainDelayMs;
+    if (maxTokensPerDomain !== undefined) this.maxTokensPerDomain = maxTokensPerDomain;
+    if (leaseDurationSec !== undefined) this.leaseDurationSec = leaseDurationSec;
   }
 
-  static async new(dbPath: string, stateDir: string, maxConcurrency?: number, domainDelayMs?: number) {
-    const recorder = new ScrapeRecorder(dbPath, stateDir, maxConcurrency, domainDelayMs);
+  static async new(
+    dbPath: string,
+    stateDir: string,
+    maxConcurrency?: number,
+    maxTokensPerDomain?: number,
+    leaseDurationSec?: number,
+  ) {
+    const recorder = new ScrapeRecorder(dbPath, stateDir, maxConcurrency, maxTokensPerDomain, leaseDurationSec);
     await recorder.db.init();
     return recorder;
   }
@@ -73,16 +86,7 @@ class ScrapeRecorder {
     return { title, screenshotPath, harPath };
   }
 
-  private extractDomain(url: string): string {
-    try {
-      return new URL(url).hostname;
-    } catch {
-      // If URL parsing fails, return the URL itself as a fallback
-      return url;
-    }
-  }
-
-  private async processJob(job: { id: number; cardId: number; url: string | null }, domain: string): Promise<void> {
+  private async processJob(job: { id: number; cardId: number; url: string | null }): Promise<void> {
     try {
       if (!job.url) {
         throw new Error(`Card ${job.cardId} has no URL`);
@@ -108,6 +112,7 @@ class ScrapeRecorder {
     } catch (error) {
       console.error(`✗ Failed to scrape ${job.url}:`, error);
       // Release job back to queue so another worker can try
+      this.db.releaseTokenLease(job.id);
       this.db.unclaimCollectJob(job.id);
     }
   }
@@ -115,32 +120,21 @@ class ScrapeRecorder {
   async runDaemon() {
     console.info(`Starting scrape daemon (worker: ${this.workerId})`);
     console.info(`  Max concurrency: ${this.maxConcurrency}`);
-    console.info(`  Domain delay: ${this.domainDelayMs}ms`);
+    console.info(`  Max tokens per domain: ${this.maxTokensPerDomain}`);
+    console.info(`  Token lease duration: ${this.leaseDurationSec}s`);
 
     while (true) {
       // Only try to claim jobs if we have capacity
       if (this.activeScrapes.size < this.maxConcurrency) {
-        const job = this.db.claimCollectJob(this.workerId);
+        const job = this.db.claimCollectJobWithLease(
+          this.workerId,
+          this.maxTokensPerDomain,
+          this.leaseDurationSec,
+        );
 
-        if (job && job.url) {
-          const domain = this.extractDomain(job.url);
-          const now = Date.now();
-          const lastScrape = this.domainLastScrape.get(domain) || 0;
-          const timeSinceLastScrape = now - lastScrape;
-
-          if (timeSinceLastScrape < this.domainDelayMs) {
-            // Need to wait for domain rate limit
-            // Release job back to queue and try again later
-            this.db.unclaimCollectJob(job.id);
-            await sleep(100); // Brief pause before retrying
-            continue;
-          }
-
-          // Update domain last scrape time
-          this.domainLastScrape.set(domain, now);
-
+        if (job) {
           // Start processing the job asynchronously
-          const scrapePromise = this.processJob(job, domain);
+          const scrapePromise = this.processJob(job);
           this.activeScrapes.add(scrapePromise);
 
           // Remove from active set when done
@@ -203,7 +197,8 @@ async function main() {
   let stateDir: string | undefined;
   let daemon = false;
   let maxConcurrency: number | undefined;
-  let domainDelayMs: number | undefined;
+  let maxTokensPerDomain: number | undefined;
+  let leaseDurationSec: number | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -216,30 +211,37 @@ async function main() {
         console.error("Error: --concurrency must be a positive integer");
         process.exit(1);
       }
-    } else if (arg === "--domain-delay" || arg === "-D") {
-      domainDelayMs = parseInt(args[++i], 10);
-      if (isNaN(domainDelayMs) || domainDelayMs < 0) {
-        console.error("Error: --domain-delay must be a non-negative integer (milliseconds)");
+    } else if (arg === "--tokens-per-domain" || arg === "-t") {
+      maxTokensPerDomain = parseInt(args[++i], 10);
+      if (isNaN(maxTokensPerDomain) || maxTokensPerDomain < 1) {
+        console.error("Error: --tokens-per-domain must be a positive integer");
+        process.exit(1);
+      }
+    } else if (arg === "--lease-duration" || arg === "-l") {
+      leaseDurationSec = parseInt(args[++i], 10);
+      if (isNaN(leaseDurationSec) || leaseDurationSec < 1) {
+        console.error("Error: --lease-duration must be a positive integer (seconds)");
         process.exit(1);
       }
     } else if (arg === "--help" || arg === "-h") {
       console.log(`Usage: npx tsx scrape/src/scrape.ts [options] <database-path> <state-directory>
 
 Options:
-  -d, --daemon              Run as a long-running daemon (default: one-shot mode)
-  -c, --concurrency <n>     Max concurrent scrapes (default: 5)
-  -D, --domain-delay <ms>   Min delay between scrapes to same domain in ms (default: 5000)
-  -h, --help                Show this help message
+  -d, --daemon                    Run as a long-running daemon (default: one-shot mode)
+  -c, --concurrency <n>           Max concurrent scrapes (default: 5)
+  -t, --tokens-per-domain <n>     Max concurrent scrapes per domain (default: 2)
+  -l, --lease-duration <seconds>  Token lease duration in seconds (default: 5)
+  -h, --help                      Show this help message
 
 Examples:
   # One-shot mode (legacy behavior)
   npx tsx scrape/src/scrape.ts state/db.sqlite3 state/scrape
 
-  # Daemon mode with defaults
+  # Daemon mode with defaults (5 concurrent, 2 per domain, 5s lease)
   npx tsx scrape/src/scrape.ts --daemon state/db.sqlite3 state/scrape
 
   # Daemon with custom settings
-  npx tsx scrape/src/scrape.ts -d -c 10 -D 3000 state/db.sqlite3 state/scrape
+  npx tsx scrape/src/scrape.ts -d -c 10 -t 3 -l 10 state/db.sqlite3 state/scrape
 `);
       process.exit(0);
     } else if (!dbPath) {
@@ -260,7 +262,13 @@ Examples:
     process.exit(1);
   }
 
-  await using recorder = await ScrapeRecorder.new(dbPath, stateDir, maxConcurrency, domainDelayMs);
+  await using recorder = await ScrapeRecorder.new(
+    dbPath,
+    stateDir,
+    maxConcurrency,
+    maxTokensPerDomain,
+    leaseDurationSec,
+  );
 
   if (daemon) {
     await recorder.runDaemon();

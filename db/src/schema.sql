@@ -60,6 +60,7 @@ CREATE TABLE crawl (
 CREATE TABLE collect_job (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   card_id INTEGER NOT NULL UNIQUE,
+  domain TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   claimed_at TEXT,
   claimed_by TEXT,
@@ -67,6 +68,7 @@ CREATE TABLE collect_job (
 );
 
 CREATE INDEX idx_collect_job_claimed_at ON collect_job(claimed_at) WHERE claimed_at IS NULL;
+CREATE INDEX idx_collect_job_domain ON collect_job(domain);
 
 CREATE TABLE postprocess_job (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,6 +81,16 @@ CREATE TABLE postprocess_job (
 
 CREATE INDEX idx_postprocess_job_detail_id ON postprocess_job(detail_id);
 CREATE INDEX idx_postprocess_job_claimed_at ON postprocess_job(claimed_at) WHERE claimed_at IS NULL;
+
+CREATE TABLE domain_token_lease (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  domain TEXT NOT NULL,
+  lease_until TEXT NOT NULL,
+  claimed_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_domain_token_lease_active ON domain_token_lease(domain, lease_until);
 
 CREATE TABLE snapshot (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

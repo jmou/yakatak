@@ -49,6 +49,15 @@ export class YakatakDb {
     this.db.pragma("foreign_keys = ON");
   }
 
+  private extractDomain(url: string): string {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      // If URL parsing fails, return the URL itself as a fallback
+      return url;
+    }
+  }
+
   async init() {
     return ensureDatabaseSchema(this.db);
   }
@@ -68,19 +77,20 @@ export class YakatakDb {
       RETURNING id
     `);
 
-    const insertCollectJobStmt = this.db.prepare<[number], void>(`
-      INSERT INTO collect_job (card_id)
-      VALUES (?)
+    const insertCollectJobStmt = this.db.prepare<[number, string], void>(`
+      INSERT INTO collect_job (card_id, domain)
+      VALUES (?, ?)
     `);
 
     const key = JSON.stringify({ type: "url", url });
+    const domain = this.extractDomain(url);
 
     const transaction = this.db.transaction(() => {
       const existingCard = selectStmt.get(key);
       if (existingCard) return existingCard.id;
 
       const card = insertCardStmt.get(key, url)!;
-      insertCollectJobStmt.run(card.id);
+      insertCollectJobStmt.run(card.id, domain);
       return card.id;
     });
 
@@ -110,6 +120,88 @@ export class YakatakDb {
       UPDATE collect_job
       SET claimed_at = NULL, claimed_by = NULL
       WHERE id = ?
+    `);
+
+    stmt.run(collectJobId);
+  }
+
+  claimCollectJobWithLease(
+    claimedBy: string,
+    maxTokensPerDomain: number = 2,
+    leaseDurationSec: number = 5,
+  ): CollectJob | undefined {
+    const transaction = this.db.transaction(() => {
+      // Find and claim a job with available rate limit tokens
+      const claimStmt = this.db.prepare<[string, number], {
+        id: number;
+        card_id: number;
+        url: string | null;
+        domain: string | null;
+      }>(`
+        WITH ActiveLeases AS (
+          SELECT
+            domain,
+            COUNT(*) as active_count
+          FROM domain_token_lease
+          WHERE lease_until > datetime('now')
+          GROUP BY domain
+        )
+        UPDATE collect_job
+        SET
+          claimed_at = datetime('now'),
+          claimed_by = ?
+        WHERE id = (
+          SELECT cj.id
+          FROM collect_job cj
+          LEFT JOIN ActiveLeases al ON al.domain = cj.domain
+          WHERE cj.claimed_at IS NULL
+            AND cj.domain IS NOT NULL
+            AND (al.active_count IS NULL OR al.active_count < ?)
+          ORDER BY cj.created_at ASC
+          LIMIT 1
+        )
+        RETURNING
+          id,
+          card_id,
+          domain,
+          (SELECT url FROM card WHERE id = card_id) AS url
+      `);
+
+      const job = claimStmt.get(claimedBy, maxTokensPerDomain);
+      if (!job) return undefined;
+
+      // Acquire a token lease for this domain
+      if (job.domain) {
+        const leaseStmt = this.db.prepare<[string, string, number], void>(`
+          INSERT INTO domain_token_lease (domain, claimed_by, lease_until)
+          VALUES (?, ?, datetime('now', '+' || ? || ' seconds'))
+        `);
+        leaseStmt.run(job.domain, claimedBy, leaseDurationSec);
+      }
+
+      return {
+        id: job.id,
+        cardId: job.card_id,
+        url: job.url,
+      };
+    });
+
+    return transaction();
+  }
+
+  releaseTokenLease(collectJobId: number): void {
+    // When unclaiming a job, also release any token leases claimed at the same time
+    // We identify leases by finding those created within 1 second of the job being claimed
+    const stmt = this.db.prepare<[number], void>(`
+      DELETE FROM domain_token_lease
+      WHERE id IN (
+        SELECT dtl.id
+        FROM domain_token_lease dtl
+        JOIN collect_job cj ON cj.domain = dtl.domain
+        WHERE cj.id = ?
+          AND dtl.claimed_by = cj.claimed_by
+          AND ABS(julianday(dtl.created_at) - julianday(cj.claimed_at)) * 86400 < 1
+      )
     `);
 
     stmt.run(collectJobId);
