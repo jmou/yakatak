@@ -68,7 +68,6 @@ CREATE TABLE collect_job (
 );
 
 CREATE INDEX idx_collect_job_claimed_at ON collect_job(claimed_at) WHERE claimed_at IS NULL;
-CREATE INDEX idx_collect_job_domain ON collect_job(domain);
 
 CREATE TABLE postprocess_job (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
