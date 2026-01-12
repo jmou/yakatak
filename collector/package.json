@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "cdp": "tsx src/index.ts ../state/zulip http://localhost:9222",
+    "cdp": "env CDP_URL=http://localhost:9222 tsx src/index.ts ../state/db.sqlite3 $PWD/../state/zulip",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@yakatak/db": "*",
     "playwright": "^1.55.1"
   },
   "devDependencies": {
