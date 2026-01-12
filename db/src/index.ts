@@ -2,11 +2,17 @@ import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-// TODO discriminate non-page sources
-export interface Source {
+export interface PageSource {
   type: "page";
   url: string;
 }
+
+export interface ZulipSource {
+  type: "zulip";
+  url: string;
+}
+
+export type Source = PageSource | ZulipSource;
 
 export interface CollectJob {
   id: number;
@@ -166,7 +172,7 @@ export class YakatakDb {
     title: string | null,
     detailImagePath: string,
     metadata: {},
-  ): { id: number; card_id: number } {
+  ): { id: number; cardId: number } {
     const upsertCard = this.db.prepare<[string, string | null], { id: number }>(`
        INSERT INTO card (key, url)
        VALUES (jsonb(?), ?)
@@ -209,13 +215,13 @@ export class YakatakDb {
 
       createPostprocessJob.run(detail.id);
 
-      return detail;
+      return { id: detail.id, cardId: detail.card_id };
     });
 
     return transaction();
   }
 
-  saveCrawl(url: string, harPath: string, title: string | null, metadata: {}): number {
+  saveCrawl(url: string, harPath: string, metadata: {}): number {
     const ensureFile = this.db.prepare<[string], { id: number }>(`
       INSERT INTO file (path)
       VALUES (?)
@@ -223,14 +229,14 @@ export class YakatakDb {
       RETURNING id
     `);
 
-    const createCrawl = this.db.prepare<[string, number, string | null, string], { id: number }>(`
-      INSERT INTO crawl (url, har_file_id, title, metadata)
-      VALUES (?, ?, ?, jsonb(?))
+    const createCrawl = this.db.prepare<[string, number, string], { id: number }>(`
+      INSERT INTO crawl (url, har_file_id, metadata)
+      VALUES (?, ?, jsonb(?))
       RETURNING id
     `);
 
     const harFile = ensureFile.get(harPath)!;
-    const crawl = createCrawl.get(url, harFile.id, title, JSON.stringify(metadata))!;
+    const crawl = createCrawl.get(url, harFile.id, JSON.stringify(metadata))!;
     return crawl.id;
   }
 

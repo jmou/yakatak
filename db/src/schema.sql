@@ -51,7 +51,6 @@ CREATE TABLE crawl (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   url TEXT NOT NULL UNIQUE,
   har_file_id INTEGER NOT NULL,
-  title TEXT,
   -- e.g., jsonb('{"crawled_at": "2025-10-16T05:17:00Z"}')
   metadata BLOB,
   FOREIGN KEY(har_file_id) REFERENCES file(id) ON DELETE SET NULL

@@ -17,7 +17,7 @@ state/added.mark: db/src/add-urls.ts urls.txt
 	npx tsx $< state/db.sqlite3 < urls.txt
 	touch $@
 
-state/scrape/: scrape/src/scrape.ts state/added.mark
+state/scrape/: collector/src/index.ts state/added.mark
 	npx tsx $< --oneshot state/db.sqlite3
 
 state/derived.mark: derive.py state/scrape/
