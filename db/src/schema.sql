@@ -130,3 +130,20 @@ CREATE TABLE delta (
   FOREIGN KEY(revision_id) REFERENCES revision(id) ON DELETE CASCADE,
   FOREIGN KEY(card_id) REFERENCES card(id) ON DELETE RESTRICT
 );
+
+CREATE TABLE workspace (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE operation (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id INTEGER NOT NULL,
+  -- e.g., jsonb('["moveCard", [0, 1], [1, 0]]')
+  command BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_operation_workspace_id ON operation(workspace_id);
+CREATE INDEX idx_operation_created_at ON operation(created_at DESC);
