@@ -91,9 +91,9 @@ class ScrapeRecorder {
         const timestamp = new Date().toISOString();
         const dir = path.join(this.stateDir, "" + job.id);
 
-        if (!job.url) throw new Error(`Card ${job.cardId} has no URL`);
+        if (job.source.type !== "page") throw new Error("Non-page source not supported");
 
-        const { title, screenshotPath, harPath } = await this.scrape(job.url, dir);
+        const { title, screenshotPath, harPath } = await this.scrape(job.source.url, dir);
 
         const metadata = {
           crawled_at: timestamp,
@@ -101,9 +101,11 @@ class ScrapeRecorder {
         };
 
         // TODO remove compatibility output
-        await fs.writeFile(`${dir}/meta.json`, JSON.stringify({ url: job.url }));
+        await fs.writeFile(`${dir}/meta.json`, JSON.stringify({ url: job.source.url }));
 
-        this.db.completeCollectJob(job.id, title, screenshotPath, harPath, metadata);
+        this.db.saveDetail(job.source, job.source.url, title, screenshotPath, metadata);
+        this.db.saveCrawl(job.source.url, harPath, title, metadata);
+        this.db.deleteCollectJob(job.id);
       })();
       promise
         .catch((e) => {

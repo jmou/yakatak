@@ -59,12 +59,11 @@ CREATE TABLE crawl (
 
 CREATE TABLE collect_job (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  card_id INTEGER NOT NULL UNIQUE,
+  source BLOB NOT NULL UNIQUE,
   domain TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   claimed_at TEXT,
-  claimed_by TEXT,
-  FOREIGN KEY(card_id) REFERENCES card(id) ON DELETE RESTRICT
+  claimed_by TEXT
 );
 
 CREATE INDEX idx_collect_job_domain ON collect_job(domain);

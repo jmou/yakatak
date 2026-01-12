@@ -2,11 +2,16 @@ import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-interface CollectJob {
+// TODO discriminate non-page sources
+export interface Source {
+  type: "page";
+  url: string;
+}
+
+export interface CollectJob {
   id: number;
-  cardId: number;
   domain: string;
-  url: string | null;
+  source: Source;
 }
 
 interface Card {
@@ -69,12 +74,12 @@ export class YakatakDb {
       RETURNING id
     `);
 
-    const insertCollectJobStmt = this.db.prepare<[number, string], void>(`
-      INSERT INTO collect_job (card_id, domain)
-      VALUES (?, ?)
+    const insertCollectJobStmt = this.db.prepare<[string, string], void>(`
+      INSERT INTO collect_job (source, domain)
+      VALUES (jsonb(?), ?)
     `);
 
-    const key = JSON.stringify({ type: "url", url });
+    const key = JSON.stringify({ type: "page", url } satisfies Source);
     const domain = new URL(url).hostname;
 
     const transaction = this.db.transaction(() => {
@@ -82,7 +87,7 @@ export class YakatakDb {
       if (existingCard) return existingCard.id;
 
       const card = insertCardStmt.get(key, url)!;
-      insertCollectJobStmt.run(card.id, domain);
+      insertCollectJobStmt.run(key, domain);
       return card.id;
     });
 
@@ -115,7 +120,7 @@ export class YakatakDb {
   ): CollectJob | undefined {
     const claimStmt = this.db.prepare<
       [string, number],
-      { id: number; card_id: number; domain: string; url: string | null }
+      { id: number; source: string; domain: string; url: string | null }
     >(`
       WITH used_tokens AS (
         SELECT domain, COUNT(*) as count
@@ -135,7 +140,7 @@ export class YakatakDb {
         ORDER BY candidate.created_at ASC
         LIMIT 1
       )
-      RETURNING id, card_id, domain, (SELECT url FROM card WHERE id = card_id) AS url
+      RETURNING id, json(source) AS source, domain
     `);
 
     const leaseStmt = this.db.prepare<[string, number], void>(`
@@ -149,29 +154,25 @@ export class YakatakDb {
 
       leaseStmt.run(row.domain, leaseDurationSec);
 
-      return { id: row.id, cardId: row.card_id, domain: row.domain, url: row.url };
+      return { id: row.id, source: JSON.parse(row.source) as Source, domain: row.domain };
     });
 
     return transaction();
   }
 
-  completeCollectJob(
-    collectJobId: number,
+  saveDetail(
+    cardKey: {},
+    url: string | null,
     title: string | null,
     detailImagePath: string,
-    harPath: string | null,
     metadata: {},
-  ): void {
-    const getJobInfo = this.db.prepare<[number], { id: number; url: string | null }>(`
-      SELECT card.id, card.url
-      FROM card
-      JOIN collect_job ON card.id = collect_job.card_id
-      WHERE collect_job.id = ?
-    `);
-
-    const deleteJob = this.db.prepare<[number], void>(`
-      DELETE FROM collect_job WHERE id = ?
-    `);
+  ): { id: number; card_id: number } {
+    const upsertCard = this.db.prepare<[string, string | null], { id: number }>(`
+       INSERT INTO card (key, url)
+       VALUES (jsonb(?), ?)
+       ON CONFLICT(key) DO UPDATE SET url = excluded.url
+       RETURNING id
+     `);
 
     const ensureFile = this.db.prepare<[string], { id: number }>(`
       INSERT INTO file (path)
@@ -180,15 +181,13 @@ export class YakatakDb {
       RETURNING id
     `);
 
-    const createDetail = this.db.prepare<[number, number, string | null, string], { id: number }>(`
+    const createDetail = this.db.prepare<
+      [number, number, string | null, string],
+      { id: number; card_id: number }
+    >(`
       INSERT INTO detail (card_id, image_file_id, title, metadata)
       VALUES (?, ?, ?, jsonb(?))
-      RETURNING id
-    `);
-
-    const createCrawl = this.db.prepare<[string, number, string | null, string], void>(`
-      INSERT INTO crawl (url, har_file_id, title, metadata)
-      VALUES (?, ?, ?, jsonb(?))
+      RETURNING id, card_id
     `);
 
     const createPostprocessJob = this.db.prepare<[number], void>(`
@@ -197,10 +196,9 @@ export class YakatakDb {
     `);
 
     const transaction = this.db.transaction(() => {
-      const card = getJobInfo.get(collectJobId)!;
+      const card = upsertCard.get(JSON.stringify(cardKey), url)!;
 
       const detailImageFile = ensureFile.get(detailImagePath)!;
-      const harFile = harPath ? ensureFile.get(harPath)! : null;
 
       const detail = createDetail.get(
         card.id,
@@ -209,16 +207,38 @@ export class YakatakDb {
         JSON.stringify(metadata),
       )!;
 
-      if (harFile && card.url) {
-        createCrawl.run(card.url, harFile.id, title, JSON.stringify(metadata))!;
-      }
-
       createPostprocessJob.run(detail.id);
 
-      deleteJob.run(collectJobId);
+      return detail;
     });
 
-    transaction();
+    return transaction();
+  }
+
+  saveCrawl(url: string, harPath: string, title: string | null, metadata: {}): number {
+    const ensureFile = this.db.prepare<[string], { id: number }>(`
+      INSERT INTO file (path)
+      VALUES (?)
+      ON CONFLICT(path) DO UPDATE SET path = excluded.path
+      RETURNING id
+    `);
+
+    const createCrawl = this.db.prepare<[string, number, string | null, string], { id: number }>(`
+      INSERT INTO crawl (url, har_file_id, title, metadata)
+      VALUES (?, ?, ?, jsonb(?))
+      RETURNING id
+    `);
+
+    const harFile = ensureFile.get(harPath)!;
+    const crawl = createCrawl.get(url, harFile.id, title, JSON.stringify(metadata))!;
+    return crawl.id;
+  }
+
+  deleteCollectJob(collectJobId: number): void {
+    const stmt = this.db.prepare<[number], void>(`
+      DELETE FROM collect_job WHERE id = ?
+    `);
+    stmt.run(collectJobId);
   }
 
   listDecks() {
