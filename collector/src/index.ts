@@ -13,7 +13,7 @@ const TOKEN_LEASE_DURATION_SEC = 5;
 const POLL_DELAY_MS = 1000;
 
 class CollectorApp {
-  public running = true;
+  public draining = false;
 
   private disposer = new AsyncDisposableStack();
   private workerId = `collector:${os.hostname()}:${process.pid}`;
@@ -52,6 +52,8 @@ class CollectorApp {
     const postprocessJob = this.db.claimPostprocessJob(this.workerId);
     if (postprocessJob) return { type: "postprocess", data: postprocessJob } as const;
 
+    if (this.draining) return undefined;
+
     this.db.expireDomainTokens();
     const collectJob = this.db.claimCollectJob(
       this.workerId,
@@ -66,17 +68,27 @@ class CollectorApp {
   async run({ oneshot }: { oneshot: boolean }) {
     console.info(`Starting collector worker ${this.workerId}`);
 
-    // FIXME draining and oneshot should finish postprocessing
-    while (this.running) {
+    while (true) {
       if (this.active.size === MAX_CONCURRENT_JOBS) {
         await Promise.race(this.active);
         continue;
       }
 
+      // Even if we are draining, we can still claim postprocessing jobs.
       const job = this.claimJob();
       if (!job) {
-        if (oneshot && !this.db.existsUnclaimedCollectJob()) break;
-        await new Promise((resolve) => setTimeout(resolve, POLL_DELAY_MS));
+        // Drain if we are oneshot and there are no more collect jobs.
+        if (oneshot && !this.draining && !this.db.existsUnclaimedCollectJob()) {
+          this.draining = true;
+        }
+
+        if (this.draining) {
+          if (this.active.size === 0) break;
+          // Finishing jobs which may add new postprocessing jobs.
+          await Promise.race(this.active);
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, POLL_DELAY_MS));
+        }
         continue;
       }
 
@@ -93,9 +105,6 @@ class CollectorApp {
         .finally(() => this.active.delete(promise));
       this.active.add(promise);
     }
-
-    console.info(`Draining ${this.active.size} active job(s)...`);
-    await Promise.allSettled(this.active);
   }
 
   private async processCollectJob(job: CollectJob) {
@@ -155,12 +164,12 @@ async function main() {
   await using app = await CollectorApp.new(dbPath);
 
   function handleShutdown() {
-    if (!app.running) {
+    if (app.draining) {
       console.info("Forcefully shutting down...");
       process.exit(1);
     }
     console.info("Gracefully shutting down...");
-    app.running = false;
+    app.draining = true;
   }
   process.on("SIGINT", handleShutdown);
   process.on("SIGTERM", handleShutdown);
