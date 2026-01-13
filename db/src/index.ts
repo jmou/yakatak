@@ -20,6 +20,12 @@ export interface CollectJob {
   source: Source;
 }
 
+export interface PostprocessJob {
+  id: number;
+  detailId: number;
+  detailImagePath: string;
+}
+
 interface Card {
   id: number;
   url: string | null;
@@ -164,6 +170,74 @@ export class YakatakDb {
     });
 
     return transaction();
+  }
+
+  claimPostprocessJob(claimedBy: string): PostprocessJob | undefined {
+    const stmt = this.db.prepare<
+      [string],
+      { id: number; detail_id: number; detail_image_path: string }
+    >(`
+      UPDATE postprocess_job
+      SET 
+        claimed_by = ?,
+        claimed_at = datetime('now')
+      WHERE id = (
+        SELECT id FROM postprocess_job
+        WHERE claimed_at IS NULL
+        ORDER BY created_at ASC
+        LIMIT 1
+      )
+      RETURNING
+        id,
+        detail_id,
+        (SELECT path FROM file WHERE file.id = (
+          SELECT image_file_id FROM detail WHERE detail.id = detail_id
+        )) as detail_image_path
+    `);
+
+    const row = stmt.get(claimedBy);
+    if (!row) return undefined;
+    return { id: row.id, detailId: row.detail_id, detailImagePath: row.detail_image_path };
+  }
+
+  savePostprocessedFiles(detailId: number, thumbnailPath: string, tilePaths: string[]): void {
+    const ensureFile = this.db.prepare<[string], { id: number }>(`
+      INSERT INTO file (path)
+      VALUES (?)
+      ON CONFLICT(path) DO UPDATE SET path = excluded.path
+      RETURNING id
+    `);
+
+    const upsertThumbnail = this.db.prepare<[number, number], void>(`
+      INSERT INTO thumbnail (detail_id, file_id)
+      VALUES (?, ?)
+      ON CONFLICT(detail_id) DO UPDATE SET file_id = excluded.file_id
+    `);
+
+    const upsertTile = this.db.prepare<[number, number, number], void>(`
+      INSERT INTO tile (detail_id, tile_index, file_id)
+      VALUES (?, ?, ?)
+      ON CONFLICT(detail_id, tile_index) DO UPDATE SET file_id = excluded.file_id
+    `);
+
+    const transaction = this.db.transaction(() => {
+      const thumbFile = ensureFile.get(thumbnailPath)!;
+      upsertThumbnail.run(detailId, thumbFile.id);
+
+      for (let i = 0; i < tilePaths.length; i++) {
+        const tileFile = ensureFile.get(tilePaths[i]!)!;
+        upsertTile.run(detailId, i, tileFile.id);
+      }
+    });
+
+    transaction();
+  }
+
+  deletePostprocessJob(postprocessJobId: number): void {
+    const stmt = this.db.prepare<[number], void>(`
+      DELETE FROM postprocess_job WHERE id = ?
+    `);
+    stmt.run(postprocessJobId);
   }
 
   saveDetail(

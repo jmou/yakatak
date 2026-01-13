@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { BrowserProxy, createBrowserProxy, createCDPBrowserProxy } from "./browser.ts";
 import { collectPage } from "./drivers/page.ts";
 import { collectZulip } from "./drivers/zulip.ts";
+import { Postprocessor } from "./postprocessor.ts";
 
 const MAX_CONCURRENT_JOBS = 5;
 const TOKENS_PER_DOMAIN = 2;
@@ -12,13 +13,16 @@ const TOKEN_LEASE_DURATION_SEC = 5;
 const POLL_DELAY_MS = 1000;
 
 class CollectorApp {
-  private db: YakatakDb;
-  private stateDir: string;
-  private browser: BrowserProxy;
+  public running = true;
+
   private disposer = new AsyncDisposableStack();
   private workerId = `collector:${os.hostname()}:${process.pid}`;
   private active: Set<Promise<void>> = new Set();
-  public draining = false;
+
+  private db: YakatakDb;
+  private stateDir: string;
+  private browser: BrowserProxy;
+  private postprocessor: Postprocessor;
 
   static async new(dbPath: string) {
     const browser = process.env.CDP_URL
@@ -37,35 +41,51 @@ class CollectorApp {
     this.db = this.disposer.adopt(db, () => db.close());
     this.stateDir = stateDir;
     this.browser = this.disposer.use(browser);
+    this.postprocessor = new Postprocessor(this.db);
   }
 
   async [Symbol.asyncDispose]() {
     await this.disposer.disposeAsync();
   }
 
+  claimJob() {
+    const postprocessJob = this.db.claimPostprocessJob(this.workerId);
+    if (postprocessJob) return { type: "postprocess", data: postprocessJob } as const;
+
+    this.db.expireDomainTokens();
+    const collectJob = this.db.claimCollectJob(
+      this.workerId,
+      TOKENS_PER_DOMAIN,
+      TOKEN_LEASE_DURATION_SEC,
+    );
+    if (collectJob) return { type: "collect", data: collectJob } as const;
+
+    return undefined;
+  }
+
   async run({ oneshot }: { oneshot: boolean }) {
     console.info(`Starting collector worker ${this.workerId}`);
 
-    while (true) {
-      if (this.draining) break;
+    // FIXME draining and oneshot should finish postprocessing
+    while (this.running) {
       if (this.active.size === MAX_CONCURRENT_JOBS) {
         await Promise.race(this.active);
         continue;
       }
 
-      this.db.expireDomainTokens();
-      const job = this.db.claimCollectJob(
-        this.workerId,
-        TOKENS_PER_DOMAIN,
-        TOKEN_LEASE_DURATION_SEC,
-      );
+      const job = this.claimJob();
       if (!job) {
         if (oneshot && !this.db.existsUnclaimedCollectJob()) break;
         await new Promise((resolve) => setTimeout(resolve, POLL_DELAY_MS));
         continue;
       }
 
-      const promise = this.processJob(job)
+      const promise =
+        job.type === "collect"
+          ? this.processCollectJob(job.data)
+          : this.postprocessor.processJob(job.data);
+
+      promise
         .catch((e) => {
           console.error("Job failed:", e);
           process.exitCode = 1;
@@ -74,10 +94,11 @@ class CollectorApp {
       this.active.add(promise);
     }
 
+    console.info(`Draining ${this.active.size} active job(s)...`);
     await Promise.allSettled(this.active);
   }
 
-  private async processJob(job: CollectJob) {
+  private async processCollectJob(job: CollectJob) {
     const collectedAt = new Date().toISOString();
     const dir = path.join(this.stateDir, "" + job.id);
     await fs.mkdir(dir);
@@ -133,17 +154,16 @@ async function main() {
 
   await using app = await CollectorApp.new(dbPath);
 
-  function handleShutdown(signal: string) {
-    if (app.draining) {
+  function handleShutdown() {
+    if (!app.running) {
       console.info("Forcefully shutting down...");
       process.exit(1);
     }
     console.info("Gracefully shutting down...");
-    app.draining = true;
+    app.running = false;
   }
-
-  process.on("SIGINT", () => handleShutdown("SIGINT"));
-  process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+  process.on("SIGINT", handleShutdown);
+  process.on("SIGTERM", handleShutdown);
 
   await app.run({ oneshot: mode === "--oneshot" });
 }

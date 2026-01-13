@@ -4,7 +4,8 @@
   "type": "module",
   "dependencies": {
     "@yakatak/db": "*",
-    "playwright": "^1.55.1"
+    "playwright": "^1.55.1",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/node": "*",
