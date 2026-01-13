@@ -35,6 +35,7 @@ async function createTiles(imagePath: string, tilesDir: string): Promise<string[
   }
 
   const { width, height } = metadata;
+  const promises: Promise<any>[] = [];
   const tilePaths: string[] = [];
 
   let i = 0;
@@ -45,16 +46,16 @@ async function createTiles(imagePath: string, tilesDir: string): Promise<string[
 
     const tilePath = path.join(tilesDir, `${i}.png`);
 
-    await sharp(imagePath)
-      .extract({ left: 0, top: yLo, width, height: tileHeight })
-      .toFile(tilePath);
-
+    promises.push(
+      sharp(imagePath).extract({ left: 0, top: yLo, width, height: tileHeight }).toFile(tilePath),
+    );
     tilePaths.push(tilePath);
 
     if (yHi >= height) break;
     i++;
   }
 
+  await Promise.all(promises);
   return tilePaths;
 }
 
@@ -67,23 +68,16 @@ export class Postprocessor {
 
   async processJob(job: PostprocessJob): Promise<void> {
     const detailImagePath = job.detailImagePath;
-    const outDir = path.join(path.dirname(detailImagePath), "derived");
+    const dir = path.dirname(detailImagePath);
 
     console.info(`Processing detail ${job.detailId} image ${detailImagePath}`);
 
-    // Clean and recreate output directory
-    try {
-      await fs.rm(outDir, { recursive: true, force: true });
-    } catch (error) {
-      // Ignore if directory doesn't exist
-    }
-    await fs.mkdir(outDir, { recursive: true });
+    const thumbPath = path.join(dir, "thumb.png");
 
-    const thumbPath = path.join(outDir, "thumb.png");
-    const tilesDir = path.join(outDir, "tiles");
-
-    await createThumbnail(detailImagePath, thumbPath);
-    const tilePaths = await createTiles(detailImagePath, tilesDir);
+    const [, tilePaths] = await Promise.all([
+      createThumbnail(detailImagePath, thumbPath),
+      createTiles(detailImagePath, path.join(dir, "tiles")),
+    ]);
 
     this.db.savePostprocessedFiles(job.detailId, thumbPath, tilePaths);
 
