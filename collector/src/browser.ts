@@ -1,5 +1,17 @@
+import * as fs from "fs/promises";
+import { join } from "path";
 import type { Browser, BrowserContext, ElementHandle, Page } from "playwright";
 import { chromium } from "playwright";
+
+async function searchPath(command: string): Promise<string | undefined> {
+  for (const dir of process.env.PATH?.split(":") ?? []) {
+    const path = join(dir, command);
+    try {
+      await fs.access(path, fs.constants.X_OK);
+      return path;
+    } catch {}
+  }
+}
 
 export interface CaptureDetail {
   cardKey: {};
@@ -12,7 +24,15 @@ export interface CaptureDetail {
 const VIEWPORT = { width: 1024, height: 768 };
 
 export async function createBrowserProxy() {
-  const browser = await chromium.launch({ headless: false });
+  const executablePath = await searchPath("chromium");
+  if (!executablePath) throw new Error("chromium not found in PATH");
+  
+  const browser = await chromium.launch({
+    channel: "chromium",
+    executablePath,
+    headless: false,
+    chromiumSandbox: true,
+  });
   return new BrowserProxy(browser);
 }
 
