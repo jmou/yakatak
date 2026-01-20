@@ -14,8 +14,8 @@ urls.txt: ipad-urls.txt
 
 state/added.mark: db/src/add-urls.ts urls.txt
 	rm -f state/db.sqlite3
-	npx tsx $< state/db.sqlite3 < urls.txt
+	node $< state/db.sqlite3 < urls.txt
 	touch $@
 
 state/scrape/: collector/src/index.ts state/added.mark
-	npx tsx $< --oneshot state/db.sqlite3
+	node $< --oneshot state/db.sqlite3

@@ -157,7 +157,7 @@ class CollectorApp {
 async function main() {
   const [, scriptPath, mode, dbPath, ...extraArgs] = process.argv;
   if ((mode !== "--oneshot" && mode !== "--daemon") || !dbPath || extraArgs.length > 0) {
-    console.error(`Usage: npx tsx ${scriptPath} (--oneshot|--daemon) <database-path>`);
+    console.error(`Usage: node ${scriptPath} (--oneshot|--daemon) <database-path>`);
     process.exit(1);
   }
 

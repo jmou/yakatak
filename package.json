@@ -1,10 +1,4 @@
 {
   "name": "yakatak",
-  "private": true,
-  "workspaces": [
-    "app",
-    "collector",
-    "db",
-    "extension"
-  ]
+  "private": true
 }

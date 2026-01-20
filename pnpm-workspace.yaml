@@ -1,0 +1,15 @@
+packages:
+  - app
+  - collector
+  - db
+  - extension
+
+ignoredBuiltDependencies:
+  - '@parcel/watcher'
+  - esbuild
+  - sharp
+  - spawn-sync
+  - unrs-resolver
+
+onlyBuiltDependencies:
+  - better-sqlite3
