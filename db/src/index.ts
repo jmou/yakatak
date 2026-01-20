@@ -516,4 +516,58 @@ export class YakatakDb {
     `);
     stmt.run(JSON.stringify(data));
   }
+
+  listWorkspaces(): Array<{ id: number; created_at: string }> {
+    const stmt = this.db.prepare<[], { id: number; created_at: string }>(`
+      SELECT id, created_at FROM workspace
+      ORDER BY created_at DESC
+    `);
+    return stmt.all();
+  }
+
+  getMostRecentWorkspace(): { id: number } | undefined {
+    const stmt = this.db.prepare<[], { id: number }>(`
+      SELECT id FROM workspace
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    return stmt.get();
+  }
+
+  createWorkspace(): { id: number } {
+    const stmt = this.db.prepare<[], { id: number }>(`
+      INSERT INTO workspace DEFAULT VALUES
+      RETURNING id
+    `);
+    return stmt.get()!;
+  }
+
+  getWorkspace(id: number): { id: number; created_at: string } | undefined {
+    const stmt = this.db.prepare<[number], { id: number; created_at: string }>(`
+      SELECT id, created_at FROM workspace WHERE id = ?
+    `);
+    return stmt.get(id);
+  }
+
+  createOperation(workspaceId: number, command: unknown[]): { id: number } {
+    const stmt = this.db.prepare<[number, string], { id: number }>(`
+      INSERT INTO operation (workspace_id, command)
+      VALUES (?, jsonb(?))
+      RETURNING id
+    `);
+    return stmt.get(workspaceId, JSON.stringify(command))!;
+  }
+
+  getOperations(workspaceId: number): Array<{ id: number; command: unknown[] }> {
+    const stmt = this.db.prepare<[number], { id: number; command: string }>(`
+      SELECT id, json(command) AS command
+      FROM operation
+      WHERE workspace_id = ?
+      ORDER BY id
+    `);
+    return stmt.all(workspaceId).map((row) => ({
+      id: row.id,
+      command: JSON.parse(row.command),
+    }));
+  }
 }

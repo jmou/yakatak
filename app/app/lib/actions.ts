@@ -226,3 +226,29 @@ export const insertCardFromUrl: UserActionFn = async (ctx) => {
 
   return ["insertCard", pileIndex, cardIndex, cardData];
 };
+
+export const loadChosenWorkspace: UserActionFn = async (ctx) => {
+  const { workspaces } = await $fetch("/api/workspaces");
+
+  const labels = [
+    "Create new workspace",
+    ...workspaces.map((w) => `Workspace ${w.id} (${w.created_at})`),
+  ];
+  const values = [null, ...workspaces.map((w) => w.id)];
+
+  const workspaceId = await ctx.ask("Select workspace", labels, 0, values);
+
+  if (workspaceId === undefined) return; // User cancelled
+
+  let targetWorkspaceId: number;
+  if (workspaceId === null) {
+    // Create new workspace
+    ctx.setStatus("Creating workspace...");
+    const newWorkspace = await $fetch("/api/workspaces", { method: "POST" });
+    targetWorkspaceId = newWorkspace.id;
+  } else {
+    targetWorkspaceId = workspaceId;
+  }
+
+  await ctx.navigate(`/workspaces/${targetWorkspaceId}`);
+};

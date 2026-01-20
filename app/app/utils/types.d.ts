@@ -6,6 +6,8 @@ declare global {
       (title: string, labels: string[], defaultIndex?: number): Promise<number | null>;
       <T>(title: string, labels: string[], defaultIndex: number, values: T[]): Promise<T | null>;
     };
+    // Navigate to a different page.
+    navigate: (path: string) => Promise<void>;
   }
 
   type UserActionFn = (ctx: ActionContext) => MaybePromise<Command | void>;

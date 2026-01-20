@@ -2,7 +2,58 @@
 import * as actions from "@/lib/actions";
 import { useScroll } from "@vueuse/core";
 
+const route = useRoute();
+const workspaceId = computed(() => parseInt(route.params.id as string));
+
 const store = useCardsStore();
+const revisionCache = ref(new Map<number, CardData[]>());
+
+function preprocessOperations(operations: Array<{ id: number; command: unknown[] }>) {
+  const result: unknown[][] = [];
+
+  for (const op of operations) {
+    if (op.command[0] === "rewind") {
+      const targetIndex = op.command[1] as number;
+      result.splice(targetIndex);
+    } else {
+      result.push(op.command);
+    }
+  }
+
+  return result;
+}
+
+async function loadAndReplayOperations() {
+  const { operations } = await $fetch(`/api/workspaces/${workspaceId.value}/operations`);
+  const commandsToReplay = preprocessOperations(operations);
+
+  // Collect all unique revision IDs from loadDeck commands
+  const revisionIds = new Set<number>();
+  for (const command of commandsToReplay) {
+    if (command[0] === "loadDeck") {
+      const revisionId = command[3] as number;
+      revisionIds.add(revisionId);
+    }
+  }
+
+  // Preload all revisions into the cache
+  for (const revisionId of revisionIds) {
+    const deckId = commandsToReplay.find(
+      (cmd) => cmd[0] === "loadDeck" && cmd[3] === revisionId
+    )?.[2] as number;
+    const revision = await $fetch(`/api/decks/${deckId}/revisions/${revisionId}`);
+    revisionCache.value.set(revisionId, revision.cards);
+  }
+
+  // Replay operations
+  for (const command of commandsToReplay) {
+    const { reverse, revisions } = invokeCommand(ctx.value, command as Command);
+    const location = store.currentLocation;
+    const entry: OpLogEntry = { forward: command as Command, reverse, location };
+    if (revisions.length > 0) entry.revisions = revisions;
+    store.opLog[store.opLogIndex++] = entry;
+  }
+}
 
 const chooser = useTemplateRef("chooser");
 const detailsElem = ref<HTMLElement>();
@@ -58,10 +109,13 @@ async function viewTransition<T>(fn: () => T): Promise<T> {
 
 const ctx = computed<ActionContext>(() => ({
   store,
-  revisionCache: new Map(),
+  revisionCache: revisionCache.value,
   setStatus,
   ask: chooser.value!.ask,
   viewTransition,
+  navigate: async (path: string) => {
+    await navigateTo(path);
+  },
 }));
 
 const rootKeyBindings: Readonly<Record<string, UserActionFn>> = {
@@ -106,6 +160,8 @@ const rootKeyBindings: Readonly<Record<string, UserActionFn>> = {
 
   u: actions.applyOpLogReverse,
   U: actions.applyOpLogForward,
+
+  w: actions.loadChosenWorkspace,
 };
 
 async function pushDelta(pile: Pile, card: Card | null, position: number, oldPosition?: number) {
@@ -142,10 +198,26 @@ async function performLoggedCommand(forward: Command) {
     }
   }
 
+  // Check if we're rewinding (inserting in the middle of the log)
+  const isRewinding = store.opLogIndex < store.opLog.length;
+
   store.opLog.splice(store.opLogIndex);
   const entry: OpLogEntry = { forward, reverse, location };
   if (revisions.length > 0) entry.revisions = revisions;
   store.opLog[store.opLogIndex++] = entry;
+
+  // Save operation(s) to database
+  if (isRewinding) {
+    // When rewinding, save both the rewind command and the actual forward command
+    await $fetch(`/api/workspaces/${workspaceId.value}/operations`, {
+      method: "POST",
+      body: { command: ["rewind", store.opLogIndex - 1] },
+    });
+  }
+  await $fetch(`/api/workspaces/${workspaceId.value}/operations`, {
+    method: "POST",
+    body: { command: forward },
+  });
 }
 
 // FIFO to serialize actions.
@@ -236,8 +308,9 @@ function stopPolling() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   detailsElem.value!.focus();
+  await loadAndReplayOperations();
   startPolling();
 });
 
